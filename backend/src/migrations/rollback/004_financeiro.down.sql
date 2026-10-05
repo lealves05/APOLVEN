@@ -1,0 +1,24 @@
+-- Reverte 004_financeiro.sql (APAGA os dados destas tabelas). Rode na ordem inversa: 004 → 001, com search_path apolven.
+set search_path to apolven;
+drop table if exists messages cascade;
+drop table if exists period_closures cascade;
+drop table if exists cash_entries cascade;
+drop table if exists reconciliation_matches cascade;
+drop table if exists split_batch_items cascade;
+drop table if exists split_accruals cascade;
+drop table if exists split_payment_batches cascade;
+drop table if exists policy_splits cascade;
+drop table if exists split_rule_versions cascade;
+drop table if exists statement_lines cascade;
+drop table if exists disputes cascade;
+drop table if exists tax_withholdings cascade;
+drop table if exists commission_adjustments cascade;
+drop table if exists commission_allocations cascade;
+drop table if exists commission_settlements cascade;
+drop table if exists bank_transactions cascade;
+drop table if exists bank_accounts cascade;
+drop table if exists import_files cascade;
+drop table if exists commission_receivables cascade;
+drop table if exists commission_rule_versions cascade;
+drop table if exists commission_agreements cascade;
+delete from _migrations where name = '004_financeiro.sql';

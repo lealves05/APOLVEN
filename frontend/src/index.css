@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: 29 78 216;
+  --primary-fg: 255 255 255;
+  --bg: 248 248 247;
+  --surface: 255 255 255;
+  --muted: 243 243 241;
+  --line: 229 229 226;
+  --ink: 24 24 27;
+  --ink-soft: 82 82 91;
+  --ink-faint: 140 140 150;
+  --radius: 14px;
+  --font: 'Inter';
+  --row: 2.5rem;
+  color-scheme: light;
+}
+.dark {
+  --bg: 14 14 16;
+  --surface: 24 24 27;
+  --muted: 34 34 38;
+  --line: 48 48 54;
+  --ink: 244 244 245;
+  --ink-soft: 190 190 198;
+  --ink-faint: 130 130 140;
+  color-scheme: dark;
+}
+.density-compact { --row: 2.1rem; }
+
+html, body, #root { height: 100%; }
+body {
+  @apply bg-bg text-ink font-sans antialiased;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+@layer components {
+  .card { @apply bg-surface border border-line rounded-app shadow-soft; }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-app-sm px-3.5 text-sm font-medium transition
+           disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap select-none;
+    height: var(--row);
+  }
+  .btn-primary { @apply btn bg-primary text-primary-fg hover:brightness-110 active:brightness-95; }
+  .btn-ghost { @apply btn text-ink-soft hover:bg-muted hover:text-ink; }
+  .btn-outline { @apply btn border border-line bg-surface hover:bg-muted; }
+  .btn-danger { @apply btn bg-red-600 text-white hover:bg-red-700; }
+  .btn-icon { @apply btn px-0 aspect-square; }
+  .input {
+    @apply w-full rounded-app-sm border border-line bg-surface px-3 text-sm text-ink placeholder:text-ink-faint
+           outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/15;
+    height: var(--row);
+  }
+  textarea.input { @apply py-2; height: auto; }
+  .label { @apply mb-1.5 block text-xs font-medium text-ink-soft; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium; }
+  .table-clean { @apply w-full text-sm; }
+  .table-clean th { @apply px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-ink-faint border-b border-line; }
+  .table-clean td { @apply px-4 py-3 border-b border-line/70; }
+  .table-clean tbody tr { @apply hover:bg-muted/60 transition; }
+}
+
+/* scrollbar discreta */
+* { scrollbar-width: thin; scrollbar-color: rgb(var(--line)) transparent; }
+
+@keyframes pop { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+.animate-pop { animation: pop .16s ease-out; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.animate-fade { animation: fade .15s ease-out; }
+
+/* ---------- Mobile: tabelas viram cards ---------- */
+@media (max-width: 767px) {
+  :is(.table-clean, .table-stack) thead { display: none; }
+  :is(.table-clean, .table-stack), :is(.table-clean, .table-stack) tbody { display: block; width: 100%; }
+  :is(.table-clean, .table-stack) tbody tr {
+    display: block; margin: 0 0 .75rem; padding: .6rem .85rem;
+    background: rgb(var(--surface)); border: 1px solid rgb(var(--line)); border-radius: var(--radius);
+    box-shadow: 0 1px 2px rgb(0 0 0 / .04);
+  }
+  .table-clean tbody tr:hover { background: rgb(var(--surface)); }
+  :is(.table-clean, .table-stack) td:not(.hidden) {
+    display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+    padding: .3rem 0; border: 0; text-align: right; min-height: 1.9rem;
+  }
+  :is(.table-clean, .table-stack) td::before {
+    content: attr(data-label); flex-shrink: 0; text-align: left;
+    font-size: .68rem; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: rgb(var(--ink-faint));
+  }
+  :is(.table-clean, .table-stack) td[data-label=""]::before { display: none; }
+  /* primeira coluna = título do card */
+  :is(.table-clean, .table-stack) td:first-child:not(.hidden) {
+    display: block; text-align: left; font-weight: 500; padding-bottom: .45rem; margin-bottom: .2rem;
+    border-bottom: 1px solid rgb(var(--line) / .7);
+  }
+  :is(.table-clean, .table-stack) td:first-child::before { display: none; }
+  :is(.table-clean, .table-stack) td[data-label=""]:last-child { justify-content: flex-end; padding-top: .4rem; }
+  :is(.table-clean, .table-stack) td > * { max-width: 100%; }
+  :is(.table-clean, .table-stack) td .truncate { max-width: 62vw; }
+  /* sem moldura dupla: o card externo some e cada linha vira um card */
+  .card:has(> .overflow-x-auto > :is(.table-clean, .table-stack)),
+  .card:has(> :is(.table-clean, .table-stack)),
+  .overflow-x-auto:has(> .table-stack) { background: transparent; border: 0; box-shadow: none; }
+  .overflow-x-auto:has(> :is(.table-clean, .table-stack)) { overflow: visible; }
+}
+
+/* Barra de ações fixa no rodapé da área de conteúdo (não cobre o menu lateral). */
+.action-bar {
+  position: sticky; bottom: 0; z-index: 20;
+  margin: 1.5rem -1rem -1rem;
+  border-top: 1px solid rgb(var(--line));
+  background: rgb(var(--surface) / .95);
+  backdrop-filter: blur(8px);
+}
+@media (min-width: 640px) { .action-bar { margin: 1.5rem -1.5rem -1.5rem; } }
+@media (min-width: 1024px) { .action-bar { margin: 1.5rem -2rem -2rem; } }

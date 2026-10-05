@@ -1,0 +1,23 @@
+-- Reverte 003_cotacao_contrato.sql (APAGA os dados destas tabelas). Rode na ordem inversa: 004 → 001, com search_path apolven.
+set search_path to apolven;
+drop table if exists service_requests cascade;
+drop table if exists claim_events cascade;
+drop table if exists claims cascade;
+drop table if exists premium_refunds cascade;
+drop table if exists premium_payments cascade;
+drop table if exists premium_installments cascade;
+drop table if exists cancellations cascade;
+drop table if exists endorsements cascade;
+drop table if exists policy_items cascade;
+drop table if exists policy_versions cascade;
+drop table if exists policies cascade;
+drop table if exists proposal_operations cascade;
+drop table if exists proposal_status_events cascade;
+drop table if exists customer_authorizations cascade;
+drop table if exists proposals cascade;
+drop table if exists comparisons cascade;
+drop table if exists quote_offers cascade;
+drop table if exists quote_tasks cascade;
+drop table if exists quote_rounds cascade;
+drop table if exists quote_requests cascade;
+delete from _migrations where name = '003_cotacao_contrato.sql';

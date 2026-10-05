@@ -1,0 +1,21 @@
+// APOLVEN — site + /api na Cloudflare (a API roda na Supabase Edge Function apolven-api-cf, schema "apolven").
+// Publicar: npx wrangler deploy -c cloudflare/wrangler.jsonc [--domain apolven.lorler.com.br]
+{
+  "$schema": "../frontend/node_modules/wrangler/config-schema.json",
+  "name": "apolven-web",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "../frontend/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api", "/api/*"]
+  },
+  "vars": {
+    "PRODUCT_ID": "apolven",
+    "API_UPSTREAM": "https://dwfbxrfniarhufltmlhb.supabase.co/functions/v1/apolven-api-cf"
+  },
+  "observability": { "enabled": true }
+}

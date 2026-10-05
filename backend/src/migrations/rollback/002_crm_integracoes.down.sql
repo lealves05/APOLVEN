@@ -1,0 +1,22 @@
+-- Reverte 002_crm_integracoes.sql (APAGA os dados destas tabelas). Rode na ordem inversa: 004 → 001, com search_path apolven.
+set search_path to apolven;
+drop table if exists products cascade;
+drop table if exists integration_events cascade;
+drop table if exists capability_validations cascade;
+drop table if exists connection_test_runs cascade;
+drop table if exists credential_versions cascade;
+drop table if exists integration_requirements cascade;
+drop table if exists provider_connections cascade;
+drop table if exists institutions cascade;
+drop table if exists partners cascade;
+drop table if exists public_links cascade;
+drop table if exists documents cascade;
+drop table if exists tasks cascade;
+drop table if exists activities cascade;
+drop table if exists opportunities cascade;
+drop table if exists privacy_requests cascade;
+drop table if exists consents cascade;
+drop table if exists client_relationships cascade;
+drop table if exists client_contacts cascade;
+drop table if exists clients cascade;
+delete from _migrations where name = '002_crm_integracoes.sql';
