@@ -212,7 +212,7 @@ r.delete('/:id/relationships/:rid', need('clients_edit'), async (req, res) => {
 });
 
 // ---- consentimentos e autorizações (separados de marketing e de Open Insurance) ----
-export const PURPOSES = { cotacao: 'Compartilhar dados para cotação', marketing: 'Comunicações de relacionamento/marketing', dados_sensiveis: 'Dados sensíveis (saúde)', portal: 'Acesso ao portal', open_insurance: 'Open Insurance (fluxo próprio do ecossistema)' };
+export const PURPOSES = { cotacao: 'Compartilhar dados para cotação', whatsapp: 'Avisos automáticos por WhatsApp (parcelas, renovação, cotações)', marketing: 'Comunicações de relacionamento/marketing', dados_sensiveis: 'Dados sensíveis (saúde)', portal: 'Acesso ao portal', open_insurance: 'Open Insurance (fluxo próprio do ecossistema)' };
 r.post('/:id/consents', need('clients_edit'), async (req, res) => {
   const id = idParam(req.params.id);
   await assertClientVisible(req, 'clients_view', id);

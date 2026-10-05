@@ -35,7 +35,15 @@ Na tela de entrada, **Experimentar a demonstração** cria uma corretora fictíc
 Em desenvolvimento, `APOLVEN_MFA=off` desliga o MFA obrigatório.
 
 Testes: `npm test` (smoke com o servidor rodando em 3334 e `APOLVEN_TEST_ADAPTERS=1`), `npm run test:unit`,
+`DATABASE_URL=postgres://.../apolven_agent_test npm run test:agent` (agente do WhatsApp contra uma Graph API falsa),
 `DATABASE_URL=postgres://.../apolven_platform_test node scripts/platform-test.mjs`.
+
+## Agente do WhatsApp
+
+Relacionamento › Agente do WhatsApp: conexão com a API oficial do WhatsApp Business (Meta), avisos automáticos aos
+clientes que autorizaram (parcelas, renovação, cotação perto de vencer, aniversário), lembretes diários da equipe
+(tarefas na Agenda + resumo no WhatsApp), autoatendimento com conferência de identidade, caixa de conversas e
+simulador. Guia completo: [`docs/whatsapp.md`](docs/whatsapp.md).
 
 ## Suporte e treinamento
 

@@ -523,7 +523,7 @@ export async function generateRenewalTasks(req) {
     const mark = marks.filter((m) => p.left <= m).pop();
     if (mark == null) continue;
     const r2 = await q(`insert into tasks (company_id, title, kind, priority, due_at, assignee_user_id, client_id, entity, entity_id, auto_key)
-       values ($1,$2,'renovacao',$3,current_date + 1,$4,$5,'policy',$6,$7) on conflict do nothing`,
+       values ($1,$2,'renovacao',$3,current_date,$4,$5,'policy',$6,$7) on conflict do nothing`,
     [req.companyId, `Renovação: apólice ${p.policy_number || ''} (${BRANCHES[p.branch]}) vence em ${p.left} dia(s)`, mark <= 15 ? 'alta' : 'normal', p.owner_user_id, p.client_id, p.id, `renov:${p.id}:${mark}`]);
     n += r2.rowCount;
   }

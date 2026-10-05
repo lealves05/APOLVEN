@@ -6,7 +6,7 @@
 //   EXTRA_PROXY     outros prefixos encaminhados à API além de /api      ex.: "/webhooks"
 //   CRON_PATH       rota chamada pelo agendamento (Cron Trigger), com Authorization: Bearer CRON_SECRET
 //   SESSION_COOKIES nomes dos cookies de sessão repassados (ex.: "__Host-rusten_rt"); os demais cookies nunca passam
-// Segredos (wrangler secret put): EDGE_PROXY_KEY (repasse do IP real à API), CRON_SECRET (só no Master).
+// Segredos (wrangler secret put): EDGE_PROXY_KEY (repasse do IP real à API), CRON_SECRET (sites com CRON_PATH).
 // O destino é sempre API_UPSTREAM: nada que venha do navegador escolhe host, porta ou URL de destino.
 
 const HOP = ['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade', 'host'];

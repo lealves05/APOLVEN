@@ -69,6 +69,11 @@ call npx --yes supabase@2 projects list >nul 2>&1 || (
 for /f "usebackq delims=" %%K in ("%KEYS%\edge-dwfb.key") do set "EK=%%K"
 call npx --yes supabase@2 secrets set EDGE_PROXY_KEY=%EK% --project-ref %REF% >> "%LOG%" 2>&1 || echo   Aviso: chave nao gravada na Supabase (os limites de tentativa usam o IP da Cloudflare ate isso ser feito).
 set "EK="
+rem segredo do agendador do agente do WhatsApp (Cron Trigger do Worker -> /api/agent/cron)
+if not exist "%KEYS%\apolven-cron.key" node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))" > "%KEYS%\apolven-cron.key"
+for /f "usebackq delims=" %%K in ("%KEYS%\apolven-cron.key") do set "CK=%%K"
+call npx --yes supabase@2 secrets set APOLVEN_CRON_SECRET=%CK% --project-ref %REF% >> "%LOG%" 2>&1 || echo   Aviso: segredo do agendador nao gravado na Supabase (rotinas do WhatsApp nao rodam ate isso ser feito).
+set "CK="
 pushd "%WT%\backend"
 call npx --yes supabase@2 functions deploy apolven-api-cf --project-ref %REF% --no-verify-jwt --use-api >> "%LOG%" 2>&1
 if errorlevel 1 (echo   Falhou a publicacao da API. Veja %LOG% & popd & pause & exit /b 1)
@@ -87,6 +92,7 @@ if errorlevel 1 (
   call npx wrangler deploy -c ..\cloudflare\wrangler.jsonc >> "%LOG%" 2>&1 || (echo   Falhou. Veja %LOG% & popd & pause & exit /b 1)
 ) else (echo   apolven.lorler.com.br OK)
 type "%KEYS%\edge-dwfb.key" | npx wrangler secret put EDGE_PROXY_KEY -c ..\cloudflare\wrangler.jsonc >> "%LOG%" 2>&1
+type "%KEYS%\apolven-cron.key" | npx wrangler secret put CRON_SECRET -c ..\cloudflare\wrangler.jsonc >> "%LOG%" 2>&1
 popd
 
 node -e "fetch('https://apolven.lorler.com.br/api/health').then(r=>console.log('   https://apolven.lorler.com.br/api/health -> '+r.status)).catch(()=>console.log('   apolven.lorler.com.br: sem resposta ainda (DNS/certificado)'))"

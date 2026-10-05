@@ -12,6 +12,9 @@ Mesmo procedimento do TORVEN/RUSTEN (documento geral da migração: `ORBI/docs/c
   sem ela as credenciais gravadas ficam ilegíveis e precisam ser cadastradas de novo).
 - IP real nos limites de tentativa: `backend/src/edgeProxy.js` + segredo `EDGE_PROXY_KEY` (o mesmo arquivo
   `%USERPROFILE%\.plataforma-cloudflare\edge-dwfb.key` usado pelo TORVEN e pelo RUSTEN).
+- Agendador do agente do WhatsApp: Cron Trigger `7 * * * *` do Worker → `/api/agent/cron`, com o segredo
+  `CRON_SECRET` (Worker) = `APOLVEN_CRON_SECRET` (Supabase), gerado pelo .bat em `%USERPROFILE%\.plataforma-cloudflare\apolven-cron.key`.
+  Webhook da Meta: `https://apolven.lorler.com.br/api/whatsapp/webhook` (ver `docs/whatsapp.md`).
 - Publicar: `PUBLICAR-CLOUDFLARE.bat` (envia a branch ao GitHub sem alterar a `main`, gera o site e o pacote da API e publica os dois).
 - Build manual: `cd backend && npm run build:edge` → `supabase/functions/apolven-api-cf/index.ts`;
   `npx supabase functions deploy apolven-api-cf --project-ref dwfbxrfniarhufltmlhb --no-verify-jwt --use-api`;

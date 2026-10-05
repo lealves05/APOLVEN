@@ -42,7 +42,30 @@ export async function seedDemo(db, companyId, ownerId) {
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id, name`,
     [companyId, unit.id, c[0], c[1], c[2], c[3], c[4], i % 2 ? broker.id : ownerId, ['indicação', 'site', 'carteira', 'whatsapp'][i % 4], { city: 'Campinas', uf: 'SP' }, ownerId]);
     await db.query(`insert into consents (company_id, client_id, purpose, legal_basis, evidence, created_by) values ($1,$2,'cotacao','procedimentos preliminares ao contrato','Autorização verbal registrada no atendimento (exemplo)',$3)`, [companyId, x.id, ownerId]);
+    if (c[4].includes('99111')) {
+      await db.query(`insert into consents (company_id, client_id, purpose, legal_basis, evidence, created_by) values ($1,$2,'whatsapp','execução do contrato','Cliente autorizou avisos pelo WhatsApp no cadastro (exemplo)',$3)`, [companyId, x.id, ownerId]);
+    }
     clients.push(x);
+  }
+  await db.query(`update clients set birth_date = (current_date - interval '38 years')::date where id = $1`, [clients[0].id]);
+  // agente do WhatsApp: rotinas configuradas, envio real desligado (demonstração usa o simulador)
+  await db.query(`insert into wa_agents (company_id, verify_token, name, settings) values ($1, md5(random()::text || clock_timestamp()::text), 'Assistente', $2) on conflict (company_id) do nothing`,
+    [companyId, JSON.stringify({ routines: { parcela_a_vencer: { enabled: true }, parcela_vencida: { enabled: true }, renovacao: { enabled: true, days: [60, 30, 15] }, cotacao_vencendo: { enabled: true } } })]);
+  {
+    // conversa de exemplo aguardando a equipe (nada foi enviado: dados fictícios)
+    const cv = await one(`insert into wa_conversations (company_id, phone, client_id, contact_name, status, handoff_reason, handoff_at, unread, last_inbound_at, last_outbound_at, verified_until)
+       values ($1,'5519991111002',$2,'Bruno Carvalho','humano','cliente pediu para falar com um corretor', now() - interval '8 minutes', 1, now() - interval '6 minutes', now() - interval '8 minutes', null) returning id`, [companyId, clients[1].id]);
+    const msgs = [
+      ['in', 'Boa tarde! Quero incluir minha filha como condutora no seguro do carro (exemplo)', 14],
+      ['out', 'Olá, Bruno! Aqui é o atendimento automático da Corretora Demonstração. Responda com o número da opção:\n1 - Minhas apólices\n2 - Parcelas e comprovantes\n3 - Sinistro ou assistência 24h\n4 - Renovação ou nova cotação\n5 - Falar com um corretor', 13],
+      ['in', '5', 9],
+      ['out', 'Certo! Já avisei a equipe da Corretora Demonstração. Um corretor vai continuar o atendimento por aqui, em horário comercial.', 8],
+      ['in', 'Ela tem 19 anos e já tem CNH (exemplo)', 6],
+    ];
+    for (const [dir, body, min] of msgs) {
+      await db.query(`insert into wa_messages (company_id, conversation_id, direction, body, status, routine, created_at) values ($1,$2,$3,$4,$5,$6, now() - make_interval(mins => $7))`,
+        [companyId, cv.id, dir, body, dir === 'in' ? 'recebida' : 'lida', dir === 'out' ? 'autoatendimento' : null, min]);
+    }
   }
   await db.query(`insert into client_relationships (company_id, client_id, related_client_id, relation, notes) values ($1,$2,$3,'conjuge','Exemplo de vínculo')`, [companyId, clients[0].id, clients[1].id]);
 

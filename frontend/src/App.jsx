@@ -21,6 +21,7 @@ import Commissions from './pages/Commissions';
 import Splits from './pages/Splits';
 import Finance from './pages/Finance';
 import Integrations, { ConnectionDetail } from './pages/Integrations';
+import AgentWhatsApp from './pages/AgentWhatsApp';
 import Products from './pages/Products';
 import Documents from './pages/Documents';
 import Communication from './pages/Communication';
@@ -98,6 +99,7 @@ export default function App() {
             <Route path="comissoes" element={<Guard perms={['commissions_view']}><Commissions /></Guard>} />
             <Route path="repasses" element={<Guard perms={['splits_view']}><Splits /></Guard>} />
             <Route path="financeiro" element={<Guard perms={['finance']}><Finance /></Guard>} />
+            <Route path="agente-whatsapp" element={<Guard perms={['agent_manage', 'agent_inbox']}><AgentWhatsApp /></Guard>} />
             <Route path="integracoes" element={<Guard perms={['integrations_view']}><Integrations /></Guard>} />
             <Route path="integracoes/:id" element={<Guard perms={['integrations_view']}><ConnectionDetail /></Guard>} />
             <Route path="produtos" element={<Products />} />

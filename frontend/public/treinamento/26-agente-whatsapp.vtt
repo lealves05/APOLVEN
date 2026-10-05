@@ -1,0 +1,65 @@
+WEBVTT
+
+1
+00:00:00.153 --> 00:00:02.792
+Aula 26. Agente do WhatsApp.
+
+2
+00:00:03.967 --> 00:00:10.660
+O Agente do WhatsApp liga o número de WhatsApp Business da corretora ao APOLVEN, pela API oficial da Meta.
+
+3
+00:00:11.658 --> 00:00:20.932
+Informe o ID do número, o token permanente e a chave secreta do app. As credenciais ficam cifradas, e trocá-las exige o código do autenticador.
+
+4
+00:00:22.846 --> 00:00:30.776
+No app da Meta, cadastre a URL de retorno e o token de verificação. Toda mensagem recebida tem a assinatura conferida.
+
+5
+00:00:33.541 --> 00:00:41.592
+Em Avisos aos clientes, ligue as rotinas: parcela a vencer, parcela vencida, renovação, cotação perto de vencer e aniversário.
+
+6
+00:00:41.612 --> 00:00:47.857
+Só recebe quem autorizou os avisos por WhatsApp, no horário permitido e nunca duas vezes o mesmo aviso.
+
+7
+00:00:50.289 --> 00:00:54.251
+A prévia mostra quem receberia hoje e o texto, sem enviar nada.
+
+8
+00:00:56.527 --> 00:01:04.564
+Mensagens iniciadas pela corretora precisam de modelo aprovado pela Meta. Copie os textos sugeridos e cadastre com o mesmo nome.
+
+9
+00:01:06.290 --> 00:01:13.468
+Os lembretes da equipe criam tarefas na Agenda: renovações, parcelas vencidas, cotações e propostas paradas.
+
+10
+00:01:13.488 --> 00:01:18.751
+Quem quiser recebe também um resumo diário no próprio WhatsApp, ligado em Minha conta.
+
+11
+00:01:24.594 --> 00:01:31.649
+Em Testar o assistente, você conversa como se fosse o cliente, sem enviar nada. O assistente responde com o menu.
+
+12
+00:01:35.791 --> 00:01:41.524
+Para mostrar apólices e parcelas, ele confere antes os três primeiros dígitos do CPF.
+
+13
+00:01:47.898 --> 00:01:55.465
+No aviso de sinistro, ele indica a assistência 24 horas e registra uma solicitação com protocolo para o corretor.
+
+14
+00:01:57.459 --> 00:02:02.445
+Com a opção 5, a conversa passa para a equipe e o assistente fica em silêncio.
+
+15
+00:02:06.619 --> 00:02:14.185
+Em Conversas, a equipe assume o atendimento, responde dentro da janela de 24 horas e depois devolve ao assistente.
+
+16
+00:02:14.205 --> 00:02:18.316
+E quem responde SAIR deixa de receber os avisos automáticos.

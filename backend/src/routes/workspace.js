@@ -6,6 +6,7 @@ import { need, can, scopeOf } from '../auth.js';
 import { audit } from '../audit.js';
 import { parse, HttpError, idParam, onlyDigits, maskDocument, sha256, randomToken, today, addDays } from '../util.js';
 import { own, assertClientVisible, portfolioFilter } from '../lib/common.js';
+import { overdueInstallmentTasks, expiringQuoteTasks } from '../lib/automations.js';
 import { generateRenewalTasks } from './policies.js';
 import { INSTALLMENT_AGG, installmentState } from '../lib/premium.js';
 
@@ -83,6 +84,11 @@ r.get('/notifications', async (req, res) => {
     const { rows: [x] } = await q(`select count(*)::int as n from statement_lines where company_id = $1 and status = 'divergente'`, [req.companyId]);
     if (x.n) items.push({ level: 'warn', text: `${x.n} linha(s) de extrato com divergência`, to: '/comissoes?tab=extratos' });
   }
+  if (can(req, 'agent_inbox') || can(req, 'agent_manage')) {
+    const { rows: [x] } = await q(`select count(*)::int as n from wa_conversations cv left join clients c on c.id = cv.client_id where cv.company_id = $1 and not cv.simulated
+        and cv.status = 'humano' and cv.unread > 0 and ($2 or cv.assigned_user_id = $3 or c.owner_user_id = $3 or cv.assigned_user_id is null)`, [req.companyId, scopeOf(req, 'clients_view') === 'all', req.user.id]);
+    if (x.n) items.push({ level: 'warn', text: `${x.n} conversa(s) no WhatsApp aguardando um corretor`, to: '/agente-whatsapp?tab=conversas' });
+  }
   res.json(items);
 });
 
@@ -92,27 +98,10 @@ r.get('/notifications', async (req, res) => {
  */
 r.post('/automations/run', async (req, res) => {
   const out = { renewals: 0, installments: 0, quotes: 0 };
-  if (can(req, 'renewals')) out.renewals = await generateRenewalTasks(req);
-  if (can(req, 'installments')) {
-    const ref = today(req.settings.timezone);
-    const { rows } = await q(`select i.*, ${INSTALLMENT_AGG}, p.client_id, p.policy_number, c.owner_user_id from premium_installments i join policies p on p.id = i.policy_id join clients c on c.id = p.client_id
-       where i.company_id = $1 and i.due_date < current_date and i.status_override is null and not i.reminders_paused`, [req.companyId]);
-    for (const x of rows.map((y) => installmentState(y, ref)).filter((y) => y.status === 'vencida')) {
-      const r2 = await q(`insert into tasks (company_id, title, kind, priority, due_at, assignee_user_id, client_id, entity, entity_id, auto_key) values ($1,$2,'parcela','alta',now(),$3,$4,'premium_installment',$5,$6) on conflict do nothing`,
-        [req.companyId, `Parcela ${x.number} vencida — apólice ${x.policy_number || ''}: confirmar situação e orientar o cliente`, x.owner_user_id, x.client_id, x.id, `parcela-vencida:${x.id}`]);
-      out.installments += r2.rowCount;
-    }
-  }
-  if (can(req, 'quotes_view')) {
-    const { rows } = await q(`select o.id, o.valid_until, qr.client_id, qr.number, qr.id as request_id from quote_offers o join quote_rounds r on r.id = o.round_id join quote_requests qr on qr.id = r.request_id
-       where o.company_id = $1 and o.status = 'ativa' and o.valid_until between current_date and current_date + $2::int and qr.status not in ('cancelada')
-       and not exists (select 1 from proposals p where p.offer_id = o.id)`, [req.companyId, req.settings.quotes.expiringDays]);
-    for (const o of rows) {
-      const r2 = await q(`insert into tasks (company_id, title, kind, priority, due_at, client_id, entity, entity_id, auto_key) values ($1,$2,'cotacao','normal',$3,$4,'quote_request',$5,$6) on conflict do nothing`,
-        [req.companyId, `Cotação nº ${o.number} vence em ${o.valid_until.split('-').reverse().join('/')}: atualizar antes de propor`, o.valid_until, o.client_id, o.request_id, `cotacao-vence:${o.id}`]);
-      out.quotes += r2.rowCount;
-    }
-  }
+  const ctx = { companyId: req.companyId, settings: req.settings };
+  if (can(req, 'renewals')) out.renewals = await generateRenewalTasks(ctx);
+  if (can(req, 'installments')) out.installments = await overdueInstallmentTasks(ctx);
+  if (can(req, 'quotes_view')) out.quotes = await expiringQuoteTasks(ctx);
   res.json(out);
 });
 

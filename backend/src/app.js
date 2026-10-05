@@ -26,6 +26,8 @@ import { claims, serviceRequests } from './routes/claims.js';
 import documentRoutes from './routes/documents.js';
 import workspaceRoutes from './routes/workspace.js';
 import reportRoutes, { exportAll } from './routes/reports.js';
+import agentRoutes from './routes/agent.js';
+import { whatsappWebhook, agentCron } from './routes/whatsapp.js';
 import { need } from './auth.js';
 
 export function createApp() {
@@ -48,7 +50,7 @@ export function createApp() {
   app.use('/api', (_req, res, next) => { res.set('Cache-Control', 'no-store'); res.set('Pragma', 'no-cache'); next(); });
   app.use((_req, res, next) => { res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()'); next(); });
   // corpo bruto para conferir a assinatura das chamadas da central da plataforma; documentos até ~8 MB (base64)
-  app.use(express.json({ limit: '12mb', verify: (req, _res, buf) => { if (req.originalUrl?.includes('/api/platform/')) req.rawBody = buf; } }));
+  app.use(express.json({ limit: '12mb', verify: (req, _res, buf) => { if (req.originalUrl?.includes('/api/platform/') || req.originalUrl?.includes('/api/whatsapp/')) req.rawBody = buf; } }));
 
   app.get('/', (_req, res) => res.json({ name: 'APOLVEN API', status: 'ok' }));
   app.get('/api/health', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
@@ -56,6 +58,8 @@ export function createApp() {
   app.use('/api/auth', authRoutes);
   app.use('/api/public', publicRoutes);
   app.use('/api/platform/v1', platformApi); // central da plataforma (chamadas assinadas)
+  app.use('/api/whatsapp', whatsappWebhook); // webhook da Meta (assinatura X-Hub-Signature-256)
+  app.use('/api/agent', agentCron);          // agendador (Bearer)
 
   const api = express.Router();
   api.use(requireAuth);
@@ -83,6 +87,7 @@ export function createApp() {
   api.use('/service-requests', serviceRequests);
   api.use('/documents', documentRoutes);
   api.use('/reports', reportRoutes);
+  api.use('/agent', agentRoutes);
   api.get('/export', need('data_export'), exportAll); // cópia completa (liberada mesmo com assinatura restrita)
   api.use('/', workspaceRoutes);
   app.use('/api/v1', api);

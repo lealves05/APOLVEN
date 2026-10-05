@@ -49,6 +49,21 @@ _(routes/platform.js)_
 | GET | `/api/platform/v1/tenants/:id/settings` |  |
 | PUT | `/api/platform/v1/tenants/:id/settings` |  |
 
+## /api/whatsapp  
+_(routes/whatsapp.js)_
+
+| Método | Caminho | Permissão |
+|---|---|---|
+| GET | `/api/whatsapp/webhook` |  |
+| POST | `/api/whatsapp/webhook` |  |
+
+## /api/agent  
+_(routes/whatsapp.js)_
+
+| Método | Caminho | Permissão |
+|---|---|---|
+| GET | `/api/agent/cron` |  |
+
 ## /api/v1/billing  
 _(routes/platform.js)_
 
@@ -370,6 +385,30 @@ _(routes/reports.js)_
 | POST | `/api/v1/reports/imports/clients` | imports |
 | POST | `/api/v1/reports/imports/policies` | imports |
 
+## /api/v1/agent  
+_(routes/agent.js)_
+
+| Método | Caminho | Permissão |
+|---|---|---|
+| GET | `/api/v1/agent` | agent_manage, agent_inbox |
+| PUT | `/api/v1/agent/connection` | agent_manage |
+| POST | `/api/v1/agent/connection/test` | agent_manage |
+| POST | `/api/v1/agent/connection/verify-token` | agent_manage |
+| POST | `/api/v1/agent/connection/disconnect` | agent_manage |
+| PUT | `/api/v1/agent/settings` | agent_manage |
+| GET | `/api/v1/agent/routines/:key/preview` | agent_manage |
+| POST | `/api/v1/agent/routines/:key/run` | agent_manage |
+| POST | `/api/v1/agent/team/run` | agent_manage |
+| GET | `/api/v1/agent/runs` | agent_manage |
+| PUT | `/api/v1/agent/me` |  |
+| GET | `/api/v1/agent/me` |  |
+| GET | `/api/v1/agent/conversations` | agent_manage, agent_inbox |
+| GET | `/api/v1/agent/conversations/:id` | agent_manage, agent_inbox |
+| POST | `/api/v1/agent/conversations/:id/messages` | agent_manage, agent_inbox |
+| POST | `/api/v1/agent/conversations/:id/status` | agent_manage, agent_inbox |
+| POST | `/api/v1/agent/simulate` | agent_manage, agent_inbox |
+| DELETE | `/api/v1/agent/simulate` | agent_manage, agent_inbox |
+
 ## /api/v1  
 _(routes/workspace.js)_
 
@@ -384,6 +423,4 @@ _(routes/workspace.js)_
 
 ## /api/v1/export
 
-| Método | Caminho | Permissão |
-|---|---|---|
 | GET | `/api/v1/export` | data_export |

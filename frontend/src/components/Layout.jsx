@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import {
   LayoutDashboard, LifeBuoy, Users, Wallet, BarChart3, UserRound, Settings, LogOut, Menu, X, Sun, Moon, ChevronDown, Plus, ShieldCheck, Building2,
   CreditCard, ChevronsLeft, ChevronsRight, ChevronRight, Home, CalendarDays, Target, Calculator, FileText, Send, FileCheck2, RefreshCw, Receipt,
-  BadgePercent, HandCoins, Landmark, Siren, Package, PlugZap, FolderOpen, MessageSquare, Lock, Briefcase, ShieldPlus,
+  BadgePercent, HandCoins, Landmark, Siren, Package, PlugZap, FolderOpen, MessageSquare, MessageCircle, Lock, Briefcase, ShieldPlus,
 } from 'lucide-react';
 import { GlobalSearch, SearchButton, Notifications, HelpButton, useShortcuts } from './Workspace';
 import { useAuth } from '../context/AuthContext';
@@ -48,6 +48,7 @@ export function useNav() {
       { to: '/agenda', label: 'Agenda e pendências', icon: CalendarDays },
       can('opportunities') && feature('crm') && { to: '/oportunidades', label: 'CRM e oportunidades', icon: Target },
       can('clients_view') && { to: '/clientes', label: 'Clientes e grupos', icon: Users },
+      (can('agent_manage') || can('agent_inbox')) && feature('whatsapp') && { to: '/agente-whatsapp', label: 'Agente do WhatsApp', icon: MessageCircle },
     ] },
     { label: 'Vendas', icon: Calculator, children: [
       can('quotes_view') && feature('multicalculo') && { to: '/cotacoes', label: 'Cotações e multicálculo', icon: Calculator },

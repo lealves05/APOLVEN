@@ -21,6 +21,7 @@
 | LGPD: solicitações de titulares, consentimentos, opt-out de marketing | Pronto |
 | SaaS/Master: manifesto, bloqueio/liberação, assinatura, redefinição do proprietário (HMAC v1/v1.1) | Pronto |
 | Segurança: MFA TOTP obrigatório (proprietário/admin/financeiro), reautenticação, limites de tentativa com IP real, CORS restrito, cabeçalhos, sem cache na API | Pronto |
+| Agente do WhatsApp Business (API oficial): avisos automáticos com consentimento e modelos aprovados, lembretes da equipe, autoatendimento, conversas, simulador, agendador — ver `docs/whatsapp.md` | Pronto (depende da conta Meta da corretora) |
 | Suporte e treinamento: 25 vídeo-aulas narradas e legendadas (todos os módulos), transcrição clicável, busca, progresso, FAQ e ajuda contextual (?) em cada tela | Pronto |
 | Publicação Cloudflare + Supabase (mesmo procedimento do TORVEN) | Pronto (`PUBLICAR-CLOUDFLARE.bat`) |
 
@@ -31,6 +32,7 @@
   exemplos financeiros 16.1–16.4 e casos A13–A22, comprovante de parcela (A24), endosso/cancelamento/renovação/sinistro,
   perfis e auditoria.
 - `scripts/platform-test.mjs` — **11/11** (contrato com a central, A27, CORS, segredo fraco, TOTP RFC 6238).
+- `scripts/agent-test.mjs` — **29/29** (agente do WhatsApp contra Graph API falsa).
 - `test/util.test.mjs` — 8 testes unitários (arredondamento, divisão de centavos, documentos, datas, CSV, TOTP).
 - Pacote da Edge Function (`npm run build:edge`) executado no **Deno 2.9**: migrações aplicadas do zero, segredos
   gerados em `apolven._secrets`, demonstração criada e rotas principais respondendo.

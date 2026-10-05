@@ -124,6 +124,23 @@ export const LESSONS = [
     "text": "O CRM organiza as oportunidades em um funil, do primeiro contato até a venda. Cada cartão mostra o cliente, o ramo e o prêmio estimado. Mude a etapa conforme a negociação avança. Na visão em lista, filtre e ordene as oportunidades. Oportunidade sem próxima ação aparece em destaque no painel, para nada ficar esquecido. Para criar, escolha o cliente, o ramo, a necessidade e a próxima ação com data. Na Agenda ficam as tarefas de hoje e das próximas datas. Conclua ou cancele cada tarefa. Filtre entre as suas tarefas e as da equipe. Nova tarefa permite definir responsável, prazo, prioridade e o cliente relacionado."
   },
   {
+    "n": 26,
+    "file": "26-agente-whatsapp",
+    "mod": "crm",
+    "s": 139,
+    "title": "Agente do WhatsApp",
+    "routes": [
+      "/agente-whatsapp"
+    ],
+    "desc": "Avisos automáticos aos clientes, lembretes da equipe e atendimento pelo WhatsApp Business.",
+    "learn": [
+      "Conectar o número (API oficial)",
+      "Avisos e lembretes automáticos",
+      "Assistente, conversas e SAIR"
+    ],
+    "text": "O Agente do WhatsApp liga o número de WhatsApp Business da corretora ao APOLVEN, pela API oficial da Meta. Informe o ID do número, o token permanente e a chave secreta do app. As credenciais ficam cifradas, e trocá-las exige o código do autenticador. No app da Meta, cadastre a URL de retorno e o token de verificação. Toda mensagem recebida tem a assinatura conferida. Em Avisos aos clientes, ligue as rotinas: parcela a vencer, parcela vencida, renovação, cotação perto de vencer e aniversário. Só recebe quem autorizou os avisos por WhatsApp, no horário permitido e nunca duas vezes o mesmo aviso. A prévia mostra quem receberia hoje e o texto, sem enviar nada. Mensagens iniciadas pela corretora precisam de modelo aprovado pela Meta. Copie os textos sugeridos e cadastre com o mesmo nome. Os lembretes da equipe criam tarefas na Agenda: renovações, parcelas vencidas, cotações e propostas paradas. Quem quiser recebe também um resumo diário no próprio WhatsApp, ligado em Minha conta. Em Testar o assistente, você conversa como se fosse o cliente, sem enviar nada. O assistente responde com o menu. Para mostrar apólices e parcelas, ele confere antes os três primeiros dígitos do CPF. No aviso de sinistro, ele indica a assistência 24 horas e registra uma solicitação com protocolo para o corretor. Com a opção 5, a conversa passa para a equipe e o assistente fica em silêncio. Em Conversas, a equipe assume o atendimento, responde dentro da janela de 24 horas e depois devolve ao assistente. E quem responde SAIR deixa de receber os avisos automáticos."
+  },
+  {
     "n": 6,
     "file": "06-nova-cotacao",
     "mod": "vendas",
@@ -468,7 +485,7 @@ export const LESSONS = [
   }
 ];
 
-export const TOTAL_SECONDS = 1403;
+export const TOTAL_SECONDS = 1542;
 
 const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 export const videoUrl = (l) => `${base}/treinamento/${l.file}.mp4`;

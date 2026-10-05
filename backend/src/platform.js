@@ -33,6 +33,7 @@ export const FEATURES = {
   importacoes: { label: 'Importações', routes: ['/imports'] },
   relatorios: { label: 'Relatórios e indicadores', routes: ['/reports'] },
   exportacao: { label: 'Exportação de dados', routes: ['/export'] },
+  whatsapp: { label: 'Agente do WhatsApp', routes: ['/agent'] },
 };
 /** Rotas liberadas mesmo com a empresa bloqueada (regularização e leitura mínima). */
 const BLOCKED_ALLOWED = ['/billing', '/export'];

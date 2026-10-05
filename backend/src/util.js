@@ -234,6 +234,8 @@ export const PERMISSIONS = [
   { group: 'Administração', key: 'users', label: 'Usuários e perfis de acesso' },
   { group: 'Administração', key: 'audit_view', label: 'Auditoria' },
   { group: 'Administração', key: 'privacy', label: 'Solicitações de titulares (LGPD)' },
+  { group: 'WhatsApp', key: 'agent_manage', label: 'Configurar o agente do WhatsApp (conexão, rotinas e lembretes)' },
+  { group: 'WhatsApp', key: 'agent_inbox', label: 'Conversas do WhatsApp (atender e responder clientes)' },
 ];
 
 export const ROLES = {
@@ -255,15 +257,15 @@ export const DEFAULT_PERMISSIONS = {
   admin: { ...ALL },
   manager: pick(['clients_view', 'clients_edit', 'clients_sensitive', 'clients_export', 'opportunities', 'tasks', 'quotes_view', 'quotes_manage',
     'comparisons_send', 'proposals_manage', 'proposals_approve', 'proposals_submit', 'policies_view', 'policies_manage', 'renewals', 'endorsements',
-    'installments', 'commissions_view', 'splits_view', 'claims', 'service_requests', 'products', 'integrations_view', 'reports', 'data_export', 'imports']),
+    'installments', 'commissions_view', 'splits_view', 'claims', 'service_requests', 'products', 'integrations_view', 'reports', 'data_export', 'imports', 'agent_manage', 'agent_inbox']),
   broker: pick(['clients_view:own', 'clients_edit', 'opportunities:own', 'tasks', 'quotes_view:own', 'quotes_manage', 'comparisons_send',
-    'proposals_manage', 'policies_view:own', 'renewals', 'installments', 'commissions_view:own', 'splits_view:own', 'service_requests', 'integrations_view']),
+    'proposals_manage', 'policies_view:own', 'renewals', 'installments', 'commissions_view:own', 'splits_view:own', 'service_requests', 'integrations_view', 'agent_inbox']),
   operations: pick(['clients_view', 'clients_edit', 'tasks', 'quotes_view', 'quotes_manage', 'proposals_manage', 'proposals_submit', 'policies_view',
-    'policies_manage', 'policies_verify', 'endorsements', 'renewals', 'installments', 'installments_confirm', 'service_requests', 'products', 'integrations_view', 'imports']),
+    'policies_manage', 'policies_verify', 'endorsements', 'renewals', 'installments', 'installments_confirm', 'service_requests', 'products', 'integrations_view', 'imports', 'agent_inbox']),
   finance: pick(['clients_view', 'tasks', 'policies_view', 'installments', 'installments_confirm', 'commissions_view', 'commissions_rules',
     'commissions_settle', 'commissions_adjust', 'splits_view', 'splits_manage', 'splits_approve', 'splits_pay', 'finance', 'finance_close',
     'reports', 'data_export', 'imports', 'integrations_view']),
-  claims: pick(['clients_view', 'tasks', 'policies_view', 'claims', 'service_requests', 'endorsements', 'installments']),
+  claims: pick(['clients_view', 'tasks', 'policies_view', 'claims', 'service_requests', 'endorsements', 'installments', 'agent_inbox']),
   auditor: pick(['clients_view', 'quotes_view', 'policies_view', 'commissions_view', 'splits_view', 'reports', 'audit_view', 'integrations_view']),
 };
 

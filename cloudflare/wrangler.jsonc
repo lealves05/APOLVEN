@@ -15,7 +15,11 @@
   },
   "vars": {
     "PRODUCT_ID": "apolven",
-    "API_UPSTREAM": "https://dwfbxrfniarhufltmlhb.supabase.co/functions/v1/apolven-api-cf"
+    "API_UPSTREAM": "https://dwfbxrfniarhufltmlhb.supabase.co/functions/v1/apolven-api-cf",
+    // agendador do agente do WhatsApp (avisos aos clientes e lembretes da equipe). Exige o segredo CRON_SECRET.
+    "CRON_PATH": "/api/agent/cron"
   },
+  // de hora em hora (cada corretora tem o próprio horário; as rotinas evitam duplicidade)
+  "triggers": { "crons": ["7 * * * *"] },
   "observability": { "enabled": true }
 }

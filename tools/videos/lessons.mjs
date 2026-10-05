@@ -125,6 +125,34 @@ export const LESSONS = [
     ],
   },
 
+  {
+    n: 26, file: '26-agente-whatsapp', mod: 'crm', title: 'Agente do WhatsApp', routes: ['/agente-whatsapp'], start: '/agente-whatsapp',
+    desc: 'Avisos automáticos aos clientes, lembretes da equipe e atendimento pelo WhatsApp Business.',
+    learn: ['Conectar o número (API oficial)', 'Avisos e lembretes automáticos', 'Assistente, conversas e SAIR'],
+    steps: [
+      { say: ['O Agente do WhatsApp liga o número de WhatsApp Business da corretora ao APOLVEN, pela API oficial da Meta.'] },
+      { act: (h) => h.spot('Número do WhatsApp Business'), say: ['Informe o ID do número, o token permanente e a chave secreta do app. As credenciais ficam cifradas, e trocá-las exige o código do autenticador.'] },
+      { act: async (h) => { await h.unspot(); await h.scroll(420); await h.spot('Webhook (mensagens recebidas)'); }, say: ['No app da Meta, cadastre a URL de retorno e o token de verificação. Toda mensagem recebida tem a assinatura conferida.'] },
+      { act: async (h) => { await h.unspot(); await h.top(); await h.click('Avisos aos clientes'); }, say: ['Em Avisos aos clientes, ligue as rotinas: parcela a vencer, parcela vencida, renovação, cotação perto de vencer e aniversário.', 'Só recebe quem autorizou os avisos por WhatsApp, no horário permitido e nunca duas vezes o mesmo aviso.'] },
+      { act: async (h) => { await h.click(h.page.getByRole('button', { name: /Prévia de hoje/ }).nth(2), { wait: 1200 }); }, say: ['A prévia mostra quem receberia hoje e o texto, sem enviar nada.'] },
+      { act: async (h) => { await h.esc(); await h.click('Modelos da Meta'); }, say: ['Mensagens iniciadas pela corretora precisam de modelo aprovado pela Meta. Copie os textos sugeridos e cadastre com o mesmo nome.'] },
+      { act: (h) => h.click('Lembretes da equipe'), say: ['Os lembretes da equipe criam tarefas na Agenda: renovações, parcelas vencidas, cotações e propostas paradas.', 'Quem quiser recebe também um resumo diário no próprio WhatsApp, ligado em Minha conta.'] },
+      { act: async (h) => {
+        await h.click('Testar o assistente');
+        const c = await h.label('Escrever como'); if (c) { await c.click(); await h.page.keyboard.type('Ana', { delay: 110 }); await h.sleep(1200); await h.page.getByText('Ana Beatriz Oliveira').locator('visible=true').first().click().catch(() => h.warn('cliente')); }
+        await h.type(h.page.getByLabel('Mensagem do cliente'), 'oi'); await h.page.keyboard.press('Enter'); await h.sleep(1600);
+      }, say: ['Em Testar o assistente, você conversa como se fosse o cliente, sem enviar nada. O assistente responde com o menu.'] },
+      { act: async (h) => { for (const m of ['1', '123']) { await h.type(h.page.getByLabel('Mensagem do cliente'), m); await h.page.keyboard.press('Enter'); await h.sleep(1500); } },
+        say: ['Para mostrar apólices e parcelas, ele confere antes os três primeiros dígitos do CPF.'] },
+      { act: async (h) => { for (const m of ['3', 'Bati o carro no estacionamento do mercado agora']) { await h.type(h.page.getByLabel('Mensagem do cliente'), m); await h.page.keyboard.press('Enter'); await h.sleep(1500); } },
+        say: ['No aviso de sinistro, ele indica a assistência 24 horas e registra uma solicitação com protocolo para o corretor.'] },
+      { act: async (h) => { await h.type(h.page.getByLabel('Mensagem do cliente'), '5'); await h.page.keyboard.press('Enter'); await h.sleep(1500); },
+        say: ['Com a opção 5, a conversa passa para a equipe e o assistente fica em silêncio.'] },
+      { act: async (h) => { await h.click('Conversas'); await h.click(h.page.locator('main button', { hasText: 'Bruno Carvalho' }).first(), { wait: 1200 }); },
+        say: ['Em Conversas, a equipe assume o atendimento, responde dentro da janela de 24 horas e depois devolve ao assistente.', 'E quem responde SAIR deixa de receber os avisos automáticos.'] },
+    ],
+  },
+
   // ───────────────────────── Vendas
   {
     n: 6, file: '06-nova-cotacao', mod: 'vendas', title: 'Nova cotação: o questionário do risco', routes: ['/cotacoes/nova'], start: '/cotacoes',

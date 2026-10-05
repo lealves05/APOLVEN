@@ -9,6 +9,7 @@ import { Input, PageHeader, Section, Notice, Toggle, useAction, FAIL, cx } from 
 import { ROLES } from '../lib/format';
 import { PRESET_COLORS } from '../lib/theme';
 import { Logo } from '../components/Layout';
+import { MyWhatsAppReminders } from './AgentWhatsApp';
 
 /** Ativação do segundo fator: QR code + confirmação + códigos de recuperação exibidos uma única vez. */
 export function MfaEnroll({ onDone }) {
@@ -130,6 +131,7 @@ export default function Account() {
             </div>
           ) : <MfaEnroll />}
         </Section>
+        <div className="lg:col-span-2"><MyWhatsAppReminders /></div>
         <Section title="Aparência" className="lg:col-span-2">
           <div className="space-y-4">
             <div>
