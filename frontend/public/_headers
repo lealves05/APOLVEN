@@ -9,3 +9,6 @@
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+/treinamento/*
+  Cache-Control: public, max-age=86400

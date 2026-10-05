@@ -1,0 +1,29 @@
+WEBVTT
+
+1
+00:00:00.152 --> 00:00:03.773
+Aula 16. Extratos da seguradora e liquidações.
+
+2
+00:00:06.771 --> 00:00:11.344
+Em Extratos da seguradora, importe o arquivo de comissões em CSV.
+
+3
+00:00:11.364 --> 00:00:15.987
+Antes de gravar, você vê a prévia, e as linhas com problema são apontadas.
+
+4
+00:00:16.902 --> 00:00:22.443
+Cada linha é conciliada com a comissão prevista. Diferenças viram ajuste ou contestação.
+
+5
+00:00:24.312 --> 00:00:30.063
+Em Liquidações, registre o recebimento: valor bruto, impostos retidos e conta de destino.
+
+6
+00:00:30.083 --> 00:00:35.389
+O valor é distribuído entre as comissões em centavos exatos, sem sobra nem falta.
+
+7
+00:00:36.297 --> 00:00:42.094
+Uma liquidação errada é estornada com motivo. O histórico continua visível na auditoria.

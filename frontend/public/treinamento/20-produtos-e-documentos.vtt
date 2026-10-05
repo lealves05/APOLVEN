@@ -1,0 +1,29 @@
+WEBVTT
+
+1
+00:00:00.152 --> 00:00:03.495
+Aula 20. Produtos, documentos e importações.
+
+2
+00:00:04.663 --> 00:00:10.673
+Em Planos, produtos e coberturas fica o catálogo de produtos de cada seguradora, por ramo e versão.
+
+3
+00:00:12.492 --> 00:00:20.891
+Cadastre o produto com o ramo, a vigência, as coberturas e as assistências. Os produtos aparecem nas fontes elegíveis de cada cotação.
+
+4
+00:00:22.966 --> 00:00:30.021
+Em Documentos ficam todos os arquivos da corretora. O sistema confere o tipo real do arquivo e guarda as versões.
+
+5
+00:00:31.840 --> 00:00:37.270
+Em Importações, traga sua carteira atual de clientes e apólices por planilha CSV.
+
+6
+00:00:37.290 --> 00:00:41.295
+Antes de gravar, as linhas com erro são separadas para correção.
+
+7
+00:00:43.019 --> 00:00:47.621
+E em Links temporários você vê e revoga os links enviados aos clientes.

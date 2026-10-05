@@ -1,0 +1,45 @@
+WEBVTT
+
+1
+00:00:00.153 --> 00:00:03.283
+Aula 6. Nova cotação: o questionário do risco.
+
+2
+00:00:04.450 --> 00:00:10.780
+Em Cotações e multicálculo ficam todas as cotações, com a situação, as ofertas e as pendências.
+
+3
+00:00:12.836 --> 00:00:19.721
+A nova cotação tem quatro etapas: cliente e ramo, dados do risco, coberturas e preferências, e fontes e envio.
+
+4
+00:00:21.809 --> 00:00:26.219
+Escolha o cliente e o ramo. O questionário muda conforme o ramo escolhido.
+
+5
+00:00:28.033 --> 00:00:34.619
+Nos dados do risco, preencha o que a seguradora precisa para calcular. Os campos obrigatórios têm asterisco.
+
+6
+00:00:39.924 --> 00:00:46.915
+Responda só o que o cliente informou. O que ficar em branco segue como não informado: o sistema nunca inventa respostas.
+
+7
+00:00:48.884 --> 00:00:56.046
+Em coberturas, marque as coberturas mínimas e os limites. As ofertas são comparadas primeiro contra esses requisitos.
+
+8
+00:00:56.966 --> 00:01:03.317
+Depois vêm as preferências: franquia, assistências e forma de pagamento, e a vigência pretendida.
+
+9
+00:01:06.130 --> 00:01:15.020
+Na última etapa aparecem as fontes elegíveis: seguradoras com credenciamento para este ramo. As demais aparecem com o motivo da exclusão.
+
+10
+00:01:18.180 --> 00:01:25.449
+Informe a base para compartilhar os dados do cliente com as seguradoras. Ela fica registrada na rodada e na auditoria.
+
+11
+00:01:28.533 --> 00:01:34.799
+Ao enviar, a rodada é criada e não pode mais ser alterada. Se algo mudar, você faz uma nova rodada.

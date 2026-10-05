@@ -1,11 +1,12 @@
 // Busca global (Ctrl+K), central de alertas e atalhos de teclado.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, Bell, Users, FileCheck2, Send, Calculator, Siren, CornerDownLeft, AlertTriangle, Info, XCircle, Zap } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Search, Bell, CircleHelp, Users, FileCheck2, Send, Calculator, Siren, CornerDownLeft, AlertTriangle, Info, XCircle, Zap } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
 import { cx, Spinner } from './ui';
+import { lessonFor } from '../lib/training';
 
 const openSearch = () => window.dispatchEvent(new Event('apolven:search'));
 const isTyping = (e) => ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName) || e.target?.isContentEditable;
@@ -40,6 +41,20 @@ export function SearchButton({ light }) {
       <span className="hidden md:inline">Buscar…</span>
       <kbd className={cx('hidden rounded px-1 text-[10px] md:inline', light ? 'bg-primary-fg/15' : 'bg-muted')}>{mac ? '⌘' : 'Ctrl'} K</kbd>
     </button>
+  );
+}
+
+/** Ajuda da tela: abre no Suporte a vídeo-aula do assunto da tela atual (ou a lista de aulas). */
+export function HelpButton({ light }) {
+  const { pathname } = useLocation();
+  if (pathname.startsWith('/suporte')) return null;
+  const l = lessonFor(pathname);
+  const label = l ? `Ajuda desta tela: aula ${l.n} — ${l.title}` : 'Ajuda e vídeo-aulas';
+  return (
+    <Link to={l ? `/suporte?aula=${l.n}` : '/suporte'} aria-label={label} title={label}
+      className={cx('grid h-9 w-9 place-items-center rounded-app-sm transition', light ? 'hover:bg-primary-fg/10' : 'text-ink-soft hover:bg-muted hover:text-ink')}>
+      <CircleHelp className="h-[18px] w-[18px]" />
+    </Link>
   );
 }
 

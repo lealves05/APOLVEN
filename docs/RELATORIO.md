@@ -21,6 +21,7 @@
 | LGPD: solicitações de titulares, consentimentos, opt-out de marketing | Pronto |
 | SaaS/Master: manifesto, bloqueio/liberação, assinatura, redefinição do proprietário (HMAC v1/v1.1) | Pronto |
 | Segurança: MFA TOTP obrigatório (proprietário/admin/financeiro), reautenticação, limites de tentativa com IP real, CORS restrito, cabeçalhos, sem cache na API | Pronto |
+| Suporte e treinamento: 25 vídeo-aulas narradas e legendadas (todos os módulos), transcrição clicável, busca, progresso, FAQ e ajuda contextual (?) em cada tela | Pronto |
 | Publicação Cloudflare + Supabase (mesmo procedimento do TORVEN) | Pronto (`PUBLICAR-CLOUDFLARE.bat`) |
 
 ## Verificações executadas

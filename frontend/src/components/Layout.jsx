@@ -5,7 +5,7 @@ import {
   CreditCard, ChevronsLeft, ChevronsRight, ChevronRight, Home, CalendarDays, Target, Calculator, FileText, Send, FileCheck2, RefreshCw, Receipt,
   BadgePercent, HandCoins, Landmark, Siren, Package, PlugZap, FolderOpen, MessageSquare, Lock, Briefcase, ShieldPlus,
 } from 'lucide-react';
-import { GlobalSearch, SearchButton, Notifications, useShortcuts } from './Workspace';
+import { GlobalSearch, SearchButton, Notifications, HelpButton, useShortcuts } from './Workspace';
 import { useAuth } from '../context/AuthContext';
 import { ROLES } from '../lib/format';
 import { cx, Avatar } from './ui';
@@ -266,7 +266,7 @@ function TopLayout() {
               </NavLink>
             )))}
           </nav>
-          <div className="ml-auto flex items-center gap-1.5"><SearchButton light /><Notifications light /><QuickActions light /><UserMenu light /></div>
+          <div className="ml-auto flex items-center gap-1.5"><SearchButton light /><HelpButton light /><Notifications light /><QuickActions light /><UserMenu light /></div>
         </div>
       </header>
       {open && <MobileDrawer nav={nav} onClose={() => setOpen(false)} />}
@@ -356,6 +356,7 @@ function SideLayout() {
           <div className="hidden min-w-0 flex-1 lg:block"><Breadcrumbs nav={nav} /></div>
           <div className="ml-auto flex items-center gap-1.5">
             <SearchButton />
+            <HelpButton />
             <Notifications />
             <QuickActions />
             <div className="hidden sm:block"><UserMenu /></div>

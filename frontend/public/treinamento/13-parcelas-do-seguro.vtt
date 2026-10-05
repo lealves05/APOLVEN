@@ -1,0 +1,29 @@
+WEBVTT
+
+1
+00:00:00.153 --> 00:00:02.323
+Aula 13. Parcelas do seguro.
+
+2
+00:00:03.493 --> 00:00:10.207
+Parcelas do seguro acompanha o prêmio que o cliente paga à seguradora. Isso é diferente da comissão da corretora.
+
+3
+00:00:12.032 --> 00:00:18.191
+Filtre as vencidas, as próximas, os pagamentos informados para conferência e as divergências.
+
+4
+00:00:19.957 --> 00:00:24.218
+Abra a parcela para registrar o pagamento ou o contato com o cliente.
+
+5
+00:00:26.046 --> 00:00:33.741
+Pagamento informado pelo cliente não é pagamento confirmado. Ele fica em conferência até a confirmação pela fonte oficial.
+
+6
+00:00:35.570 --> 00:00:40.679
+Na apólice, você gera um link para o cliente ver as parcelas e enviar o comprovante.
+
+7
+00:00:40.699 --> 00:00:44.597
+E com CSV você exporta a lista para trabalhar em planilha.

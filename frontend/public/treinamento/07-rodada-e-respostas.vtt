@@ -1,0 +1,41 @@
+WEBVTT
+
+1
+00:00:00.151 --> 00:00:04.262
+Aula 7. Rodada de multicálculo e respostas das seguradoras.
+
+2
+00:00:07.229 --> 00:00:16.247
+Ao abrir a cotação, o topo mostra a abrangência real da pesquisa: quantas seguradoras eram elegíveis, quantas responderam e quantas estão pendentes.
+
+3
+00:00:17.217 --> 00:00:25.083
+Se faltar resposta, o sistema avisa que a comparação é parcial. Falha técnica ou falta de resposta nunca é tratada como recusa.
+
+4
+00:00:26.932 --> 00:00:33.667
+Cada seguradora vira uma consulta. Com integração ativa, a consulta é automática; sem ela, é assistida.
+
+5
+00:00:35.897 --> 00:00:42.739
+Na consulta assistida, você pede a cotação no canal oficial da seguradora e registra aqui a resposta formal.
+
+6
+00:00:45.523 --> 00:00:52.066
+Informe o produto, o número da cotação, se é cotação válida ou só valor indicativo, a origem e a validade.
+
+7
+00:00:53.879 --> 00:01:01.468
+Depois, o prêmio e as coberturas, com limites e franquias. Campo que a seguradora não informou fica em branco: nunca use zero.
+
+8
+00:01:04.012 --> 00:01:09.489
+Inclua as assistências, as exigências e as formas de pagamento com o total de cada opção.
+
+9
+00:01:12.907 --> 00:01:17.631
+Pronto: a resposta entra na comparação com a origem e a validade visíveis.
+
+10
+00:01:17.651 --> 00:01:23.746
+Valor indicativo também aparece, mas não pode virar proposta sem a confirmação da seguradora.

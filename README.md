@@ -19,6 +19,7 @@ backend/   Node 20+ · Express 5 · pg · zod  (API em /api; migrações SQL em 
 frontend/  React 18 · Vite · Tailwind · React Router (rotas em português)
 cloudflare/  worker.js (igual ao dos outros sistemas) + wrangler.jsonc (apolven-web)
 docs/      API.md (rotas e permissões), FRONTEND_CONVENTIONS.md, cloudflare.md, RELATORIO.md (verificações e limites)
+tools/videos/  roteiro e gravação das 25 vídeo-aulas do Suporte (Playwright + narração Kokoro + ffmpeg)
 PUBLICAR-CLOUDFLARE.bat   publica a branch cloudflare (site + API) em apolven.lorler.com.br
 ```
 
@@ -35,6 +36,12 @@ Em desenvolvimento, `APOLVEN_MFA=off` desliga o MFA obrigatório.
 
 Testes: `npm test` (smoke com o servidor rodando em 3334 e `APOLVEN_TEST_ADAPTERS=1`), `npm run test:unit`,
 `DATABASE_URL=postgres://.../apolven_platform_test node scripts/platform-test.mjs`.
+
+## Suporte e treinamento
+
+Em Configurações › Suporte ficam 25 vídeo-aulas (≈23 min) que cobrem todos os módulos, com narração em português,
+legenda na imagem, transcrição clicável (WebVTT), busca, progresso por usuário, perguntas frequentes e contato.
+O ícone de ajuda (?) no topo de cada tela abre a aula daquele assunto. Para regravar: `tools/videos/README.md`.
 
 ## Regras que o sistema garante
 

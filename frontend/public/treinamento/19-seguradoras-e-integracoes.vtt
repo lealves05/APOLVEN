@@ -1,0 +1,37 @@
+WEBVTT
+
+1
+00:00:00.154 --> 00:00:03.113
+Aula 19. Seguradoras e integrações.
+
+2
+00:00:04.289 --> 00:00:10.427
+Em Seguradoras e integrações você cadastra as seguradoras e parceiros com quem a corretora trabalha.
+
+3
+00:00:12.209 --> 00:00:20.822
+Pesquise a empresa e escolha o caminho: API da seguradora, plataforma de multicálculo, arquivos oficiais ou atendimento assistido.
+
+4
+00:00:25.232 --> 00:00:30.069
+A configuração tem cinco etapas, e o progresso mostra exatamente o que falta.
+
+5
+00:00:30.970 --> 00:00:37.385
+Os dados da corretora são reaproveitados do cadastro: razão social, CNPJ e registro SUSEP.
+
+6
+00:00:39.213 --> 00:00:47.164
+O checklist lista os requisitos e documentos do credenciamento. Prepare o texto da solicitação de acesso e registre o protocolo.
+
+7
+00:00:48.683 --> 00:00:55.845
+Com o credenciamento aprovado, você informa as credenciais. Elas são guardadas cifradas e nunca voltam para a tela.
+
+8
+00:00:56.815 --> 00:01:03.141
+Depois do teste de conexão, cada função é ativada separadamente: cotação, transmissão, parcelas.
+
+9
+00:01:03.161 --> 00:01:09.235
+Enquanto isso não acontece, o trabalho continua no modo assistido, sem nenhum resultado simulado.
