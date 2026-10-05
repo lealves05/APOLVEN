@@ -1,8 +1,9 @@
 // Gera frontend/src/lib/training.js a partir do roteiro (lessons.mjs) e das durações finais dos vídeos.
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { LESSONS, MODULES } from './lessons.mjs';
-const PUB = new URL('../../frontend/public/treinamento', import.meta.url).pathname;
+const PUB = fileURLToPath(new URL('../../frontend/public/treinamento', import.meta.url));
 const dur = (f) => { try { return Math.round(Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', `${PUB}/${f}.mp4`], { stdio: ['ignore', 'pipe', 'ignore'] }).toString())); } catch { return 60; } };
 const chunks = (say) => (Array.isArray(say) ? say : say ? [say] : []);
 const lessons = LESSONS.map((l) => ({ n: l.n, file: l.file, mod: l.mod, s: dur(l.file), title: l.title, routes: l.routes, desc: l.desc, learn: l.learn,
@@ -36,5 +37,5 @@ export function lessonFor(pathname) {
   return best;
 }
 `;
-fs.writeFileSync(new URL('../../frontend/src/lib/training.js', import.meta.url).pathname, src);
+fs.writeFileSync(fileURLToPath(new URL('../../frontend/src/lib/training.js', import.meta.url)), src);
 console.log(lessons.length, 'aulas,', Math.round(total / 60), 'min');

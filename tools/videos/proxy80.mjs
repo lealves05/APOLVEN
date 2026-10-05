@@ -2,10 +2,11 @@
 // Serve o build de produção (frontend/dist, fallback SPA) e encaminha /api para a API local (3334).
 import http from 'node:http';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-const DIST = new URL('../../frontend/dist', import.meta.url).pathname;
-const PUB = new URL('../../frontend/public', import.meta.url).pathname;
+const DIST = fileURLToPath(new URL('../../frontend/dist', import.meta.url));
+const PUB = fileURLToPath(new URL('../../frontend/public', import.meta.url));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.mp4': 'video/mp4', '.vtt': 'text/vtt; charset=utf-8', '.json': 'application/json', '.woff2': 'font/woff2' };
 const isFile = (x) => { try { return fs.statSync(x).isFile(); } catch { return false; } };
 
