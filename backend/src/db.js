@@ -26,8 +26,28 @@ export const pool = new pg.Pool({
   max: Number(process.env.DB_POOL_MAX || 8),
   idleTimeoutMillis: 30000,
 });
-// as consultas de um cliente são executadas em ordem: o "set search_path" sempre roda antes de qualquer outra
-pool.on('connect', (client) => { client.query(`set search_path to ${SCHEMA}`).catch(() => {}); });
+// "set search_path" roda uma vez por conexão nova e é AGUARDADO antes de a conexão ser entregue (pool.query e
+// pool.connect passam por aqui). Antes era disparado sem await no evento 'connect' e a primeira consulta era
+// enfileirada no mesmo cliente enquanto ele ainda executava — uso concorrente que o pg@9 deixa de aceitar.
+const rawConnect = pool.connect.bind(pool);
+async function readyClient() {
+  const client = await rawConnect();
+  if (!client.__apolvenSchema) {
+    try {
+      await client.query(`set search_path to ${SCHEMA}`);
+      client.__apolvenSchema = true;
+    } catch (err) {
+      client.release(err);
+      throw err;
+    }
+  }
+  return client;
+}
+pool.connect = (cb) => {
+  if (typeof cb !== 'function') return readyClient();
+  readyClient().then((client) => cb(null, client, (err) => client.release(err)), (err) => cb(err));
+  return undefined;
+};
 pool.on('error', (err) => console.error('[db] erro no pool', err.message));
 
 export const q = (text, params) => pool.query(text, params);

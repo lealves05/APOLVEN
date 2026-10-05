@@ -215,7 +215,10 @@ export async function createSettlement(db, req, d, { nextNumber, emit, audit }) 
   if (sum !== d.gross_cents) throw bad(`As alocações (${(sum / 100).toFixed(2)}) precisam fechar exatamente o valor bruto liquidado (${(d.gross_cents / 100).toFixed(2)}).`, { code: 'ALLOCATION_MISMATCH' });
   const seen = new Set();
   const recs = [];
-  for (const a of d.allocations) {
+  // travas sempre na mesma ordem (id da comissão): liquidações simultâneas com as mesmas comissões em ordens
+  // diferentes esperam uma pela outra em vez de entrar em deadlock
+  const ordered = [...d.allocations].sort((a, b) => (a.receivable_id < b.receivable_id ? -1 : a.receivable_id > b.receivable_id ? 1 : 0));
+  for (const a of ordered) {
     if (seen.has(a.receivable_id)) throw bad('Uma comissão aparece duas vezes nas alocações.');
     seen.add(a.receivable_id);
     let r = await lockReceivable(db, req.companyId, a.receivable_id);

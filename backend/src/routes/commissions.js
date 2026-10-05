@@ -358,13 +358,13 @@ r.post('/statements/reconcile', need('commissions_settle'), async (req, res) => 
     retention_nature: z.string().max(200).nullable().optional(), confirm_missing: z.boolean().default(true) }), req.body);
   const out = await tx(async (db) => {
     await assertPeriodOpen(db, req.companyId, d.settled_date);
-    const { rows: lines } = await db.query(`select * from statement_lines where company_id = $1 and id = any($2) for update`, [req.companyId, d.line_ids]);
+    const { rows: lines } = await db.query(`select * from statement_lines where company_id = $1 and id = any($2) order by id for update`, [req.companyId, d.line_ids]);
     if (lines.length !== new Set(d.line_ids).size) throw notFound('Linha não encontrada.');
     if (new Set(lines.map((l) => l.institution_id)).size > 1) throw new HttpError(400, 'Selecione linhas de uma única seguradora.');
     if (lines.some((l) => l.status === 'conciliada')) throw conflict('Há linha já conciliada na seleção.');
     if (lines.some((l) => !l.receivable_id)) throw conflict('Há linha sem comissão vinculada: vincule ou contestue antes.');
     const credits = lines.filter((l) => l.kind !== 'estorno');
-    const reversals = lines.filter((l) => l.kind === 'estorno');
+    const reversals = lines.filter((l) => l.kind === 'estorno').sort((a, b) => (a.receivable_id < b.receivable_id ? -1 : a.receivable_id > b.receivable_id ? 1 : 0));
     let settlement = null;
     if (credits.length) {
       // a mesma comissão pode aparecer em mais de uma linha: soma por comissão

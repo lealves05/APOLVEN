@@ -105,8 +105,10 @@ export async function createPolicyFromProposal(db, req, p, body) {
     JSON.stringify(d.coverages.length ? d.coverages : p.offer_snapshot.coverages || []), d.notes || null, req.user.id]);
   await insertInstallments(db, req, pol.id, d.installments, { payer: d.payer_client_id || p.client_id, source: 'manual' });
   if (d.document_id) await db.query(`update documents set entity = 'policy', entity_id = $3, kind = 'apolice' where id = $1 and company_id = $2`, [d.document_id, req.companyId, pol.id]);
-  await db.query(`update proposals set policy_id = $3, divergences = $4 where id = $1 and company_id = $2`, [p.id, req.companyId, pol.id, JSON.stringify(div)]);
-  await db.query(`update proposals set status = 'documento_recebido', updated_at = now() where id = $1`, [p.id]);
+  // vínculo condicional: a proposta só recebe UMA apólice (o chamador trava a proposta; isto garante mesmo sem a trava)
+  const { rowCount: linked } = await db.query(`update proposals set policy_id = $3, divergences = $4, status = 'documento_recebido', updated_at = now()
+     where id = $1 and company_id = $2 and policy_id is null and status = 'aceita'`, [p.id, req.companyId, pol.id, JSON.stringify(div)]);
+  if (!linked) throw conflict('Esta proposta já tem apólice registrada ou não está mais aceita.', { code: 'POLICY_EXISTS' });
   await db.query(`insert into proposal_status_events (company_id, proposal_id, from_status, to_status, source, notes, user_id, user_name) values ($1,$2,$3,'documento_recebido','manual',$4,$5,$6)`,
     [req.companyId, p.id, p.status, div.length ? `Documento recebido com ${div.length} divergência(s) — revisão necessária` : 'Documento recebido; aguardando conferência', req.user.id, req.user.name]);
   if (d.commission?.rule_version_id) await applyCommissionPlan(db, req, pol, d.commission);
@@ -250,10 +252,12 @@ r.put('/:id', need('policies_manage'), async (req, res) => {
 r.post('/:id/verify', need('policies_verify'), async (req, res) => {
   const d = parse(z.object({ resolution: z.string().trim().max(2000).nullable().optional() }), req.body);
   const p = await loadPolicy(req, req.params.id);
-  if (p.doc_state === 'conferido') throw conflict('Apólice já conferida.');
-  if (p.doc_state === 'aguardando_documento') throw conflict('Anexe o documento contratual antes de conferir.');
-  if (p.doc_state === 'divergente' && !d.resolution) throw conflict('Há divergência entre o documento emitido e a versão autorizada. Registre a resolução (endosso solicitado, aceite do cliente…) para conferir.', { code: 'DIVERGENCE_OPEN' });
   await tx(async (db) => {
+    // estado conferido DENTRO da transação, com a apólice travada (cliques simultâneos não conferem duas vezes)
+    const { rows: [cur] } = await db.query('select doc_state from policies where id = $1 and company_id = $2 for update', [p.id, req.companyId]);
+    if (cur.doc_state === 'conferido') throw conflict('Apólice já conferida.', { code: 'ALREADY_VERIFIED' });
+    if (cur.doc_state === 'aguardando_documento') throw conflict('Anexe o documento contratual antes de conferir.');
+    if (cur.doc_state === 'divergente' && !d.resolution) throw conflict('Há divergência entre o documento emitido e a versão autorizada. Registre a resolução (endosso solicitado, aceite do cliente…) para conferir.', { code: 'DIVERGENCE_OPEN' });
     await db.query(`update policies set doc_state = 'conferido', verified_at = now(), verified_by = $3, version = version + 1, notes = case when $4::text is null then notes else coalesce(notes || E'\n', '') || 'Resolução de divergência: ' || $4 end
        where id = $1 and company_id = $2`, [p.id, req.companyId, req.user.id, d.resolution || null]);
     if (p.proposal_id) {
@@ -404,9 +408,11 @@ r.put('/endorsements/:eid', need('endorsements'), async (req, res) => {
   if (d.status === 'emitido' && (!d.effective_date || !(d.document_id || d.protocol))) throw new HttpError(400, 'Endosso emitido exige data de efeito e documento ou protocolo.');
   if (d.document_id) await own('documents', d.document_id, req.companyId, 'id');
   const out = await tx(async (db) => {
+    // atualização condicional: só um registro encerra o endosso (emissão simultânea não aplica a diferença de prêmio duas vezes)
     const { rows: [x] } = await db.query(`update endorsements set status = $3, protocol = coalesce($4, protocol), effective_date = coalesce($5, effective_date),
         premium_diff_cents = coalesce($6, premium_diff_cents), commission_diff_cents = coalesce($7, commission_diff_cents), document_id = coalesce($8, document_id), updated_at = now()
-      where id = $1 and company_id = $2 returning *`, [e.id, req.companyId, d.status, d.protocol || null, d.effective_date || null, d.premium_diff_cents ?? null, d.commission_diff_cents ?? null, d.document_id || null]);
+      where id = $1 and company_id = $2 and status not in ('emitido', 'cancelado', 'recusado') returning *`, [e.id, req.companyId, d.status, d.protocol || null, d.effective_date || null, d.premium_diff_cents ?? null, d.commission_diff_cents ?? null, d.document_id || null]);
+    if (!x) throw conflict('Endosso já encerrado por outra pessoa. Recarregue para ver a situação atual.', { code: 'ENDORSEMENT_CLOSED' });
     if (d.status === 'emitido') {
       // a versão original é preservada; o contrato recebe nova versão com o endosso
       const sets = ['version = version + 1', 'updated_at = now()'];
@@ -458,8 +464,9 @@ r.put('/cancellations/:cid', need('endorsements'), async (req, res) => {
   if (c.status !== 'solicitado') throw conflict('Cancelamento já concluído.');
   if (d.status === 'efetivado' && !d.effective_date) throw new HttpError(400, 'Informe a data de efeito do cancelamento.');
   await tx(async (db) => {
-    await db.query(`update cancellations set status = $3, effective_date = $4, evidence = $5, protocol = $6, refund_cents = $7, refund_recipient = $8, refund_payer = $9, updated_at = now()
-       where id = $1 and company_id = $2`, [c.id, req.companyId, d.status, d.effective_date || null, d.evidence, d.protocol || null, d.refund_cents ?? null, d.refund_recipient || null, d.refund_payer || null]);
+    const { rowCount } = await db.query(`update cancellations set status = $3, effective_date = $4, evidence = $5, protocol = $6, refund_cents = $7, refund_recipient = $8, refund_payer = $9, updated_at = now()
+       where id = $1 and company_id = $2 and status = 'solicitado'`, [c.id, req.companyId, d.status, d.effective_date || null, d.evidence, d.protocol || null, d.refund_cents ?? null, d.refund_recipient || null, d.refund_payer || null]);
+    if (!rowCount) throw conflict('Cancelamento já concluído por outra pessoa.', { code: 'CANCELLATION_CLOSED' });
     const state = d.status === 'efetivado' ? 'cancelada' : 'vigente';
     await db.query(`update policies set contract_state = $3, status_source = 'manual', status_reason = $4, version = version + 1 where id = $1 and company_id = $2`,
       [p.id, req.companyId, state, `Cancelamento ${d.status}: ${d.evidence}`]);
@@ -497,9 +504,11 @@ renewals.get('/', need('renewals'), async (req, res) => {
 renewals.post('/:id/opportunity', need('renewals'), async (req, res) => {
   const p = await loadPolicy(req, req.params.id);
   if (!['vigente', 'vencida'].includes(p.contract_state)) throw conflict('Só apólices vigentes ou recém-vencidas entram em renovação.');
-  const existing = await one('select * from opportunities where company_id = $1 and renewal_of_policy_id = $2 and stage not in (\'perdido\')', [req.companyId, p.id]);
-  if (existing) return res.json(existing);
   const o = await tx(async (db) => {
+    // trava a apólice e confere a oportunidade existente dentro da transação (idempotente também em cliques simultâneos)
+    await db.query('select id from policies where id = $1 and company_id = $2 for update', [p.id, req.companyId]);
+    const { rows: [existing] } = await db.query(`select * from opportunities where company_id = $1 and renewal_of_policy_id = $2 and stage not in ('perdido')`, [req.companyId, p.id]);
+    if (existing) return { existing };
     const n = await nextNumber(db, req.companyId, 'opportunity');
     const { rows: [x] } = await db.query(`insert into opportunities (company_id, number, client_id, branch, title, need, stage, estimated_premium_cents, origin, owner_user_id, renewal_of_policy_id, next_action, next_action_at, created_by)
        values ($1,$2,$3,$4,$5,$6,'coleta_dados',$7,'renovacao',coalesce((select owner_user_id from clients where id = $3), $8),$9,'Atualizar risco e necessidades do cliente', now() + interval '2 days', $8) returning *`,
@@ -508,6 +517,7 @@ renewals.post('/:id/opportunity', need('renewals'), async (req, res) => {
     await logActivity(db, req, { clientId: p.client_id, opportunityId: x.id, summary: `Renovação iniciada para a apólice ${p.policy_number || ''}` });
     return x;
   });
+  if (o.existing) return res.json(o.existing);
   res.status(201).json(o);
 });
 

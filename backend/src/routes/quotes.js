@@ -446,9 +446,12 @@ comparisons.post('/:id/links/:lid/revoke', need('comparisons_send'), async (req,
 });
 
 /** Escolha do cliente registrada pela equipe (canal e evidência). Manifestação ≠ aceite da seguradora (A11). */
-export async function registerChoice(db, companyId, c, { offer_id, payment_option, via, by_name, ip = null, actor = null }) {
+export async function registerChoice(db, companyId, c0, { offer_id, payment_option, via, by_name, ip = null, actor = null }) {
+  // trava o comparativo e confere o estado DENTRO da transação: duplo clique/duas abas não registram duas escolhas
+  const { rows: [c] } = await db.query('select * from comparisons where id = $1 and company_id = $2 for update', [c0.id, companyId]);
+  if (!c) throw notFound();
   if (!c.offer_ids.includes(offer_id)) throw new HttpError(400, 'Oferta não pertence a este comparativo.');
-  if (['escolhido', 'cancelado', 'expirado'].includes(c.status)) throw conflict('Este comparativo já foi concluído.');
+  if (['escolhido', 'cancelado', 'expirado'].includes(c.status)) throw conflict('Este comparativo já foi concluído: a escolha já foi registrada.', { code: 'ALREADY_CHOSEN' });
   const { rows: [o] } = await db.query('select status, quote_kind, valid_until, payment_options from quote_offers where id = $1 and company_id = $2', [offer_id, companyId]);
   if (o.status !== 'ativa') throw conflict('Esta opção não está mais disponível.');
   const { rows: [co] } = await db.query(`select settings->>'timezone' as tz from companies where id = $1`, [companyId]);
@@ -456,7 +459,8 @@ export async function registerChoice(db, companyId, c, { offer_id, payment_optio
   if (o.valid_until && o.valid_until < today(co?.tz || undefined)) throw conflict('A cotação desta opção venceu. A corretora vai atualizar os valores.', { code: 'QUOTE_EXPIRED' });
   if (payment_option && !(o.payment_options || []).some((p) => p.id === payment_option)) throw new HttpError(400, 'Forma de pagamento inválida.');
   const { rows: [x] } = await db.query(`update comparisons set status = 'escolhido', chosen_offer_id = $3, chosen_payment_option = $4, chosen_at = now(), chosen_via = $5, chosen_by_name = $6, chosen_ip = $7
-     where id = $1 and company_id = $2 returning *`, [c.id, companyId, offer_id, payment_option || null, via, by_name, ip]);
+     where id = $1 and company_id = $2 and status not in ('escolhido', 'cancelado', 'expirado') returning *`, [c.id, companyId, offer_id, payment_option || null, via, by_name, ip]);
+  if (!x) throw conflict('Este comparativo já foi concluído: a escolha já foi registrada.', { code: 'ALREADY_CHOSEN' });
   await db.query(`insert into activities (company_id, client_id, entity, entity_id, kind, summary, created_by, created_by_name) values ($1,$2,'comparison',$3,'sistema',$4,$5,$6)`,
     [companyId, c.client_id, c.id, `Cliente escolheu uma opção do comparativo (${via}) — ainda não é aceite da seguradora`, actor?.id || null, actor?.name || by_name]);
   return x;

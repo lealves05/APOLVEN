@@ -28,17 +28,21 @@ const NEXT = {
   rascunho: ['retirada'],
 };
 
-async function loadProposal(req, id, db = null) {
+async function loadProposal(req, id, db = null, { lock = false } = {}) {
   const run = db ? (t, p) => db.query(t, p) : q;
   const { rows: [p] } = await run(`select p.*, c.name as client_name, i.name as institution_name from proposals p join clients c on c.id = p.client_id
-     join institutions i on i.id = p.institution_id where p.id = $1 and p.company_id = $2`, [idParam(id), req.companyId]);
+     join institutions i on i.id = p.institution_id where p.id = $1 and p.company_id = $2${lock ? ' for update of p' : ''}`, [idParam(id), req.companyId]);
   if (!p) throw notFound();
   await assertClientVisible(req, 'quotes_view', p.client_id);
   return p;
 }
 
+const STATE_CHANGED = () => conflict('A proposta foi alterada por outra pessoa enquanto você registrava. Recarregue e confira o andamento.', { code: 'STATE_CHANGED' });
+
+/** Transição condicional: só passa se a proposta ainda está no estado lido (duas pessoas não gravam transições opostas). */
 async function setStatus(db, req, p, to, { source = 'manual', protocol = null, evidence = null, notes = null, occurredAt = null } = {}) {
-  await db.query('update proposals set status = $3, updated_at = now() where id = $1 and company_id = $2', [p.id, req.companyId, to]);
+  const { rowCount } = await db.query('update proposals set status = $3, updated_at = now() where id = $1 and company_id = $2 and status = $4', [p.id, req.companyId, to, p.status]);
+  if (!rowCount) throw STATE_CHANGED();
   await db.query(`insert into proposal_status_events (company_id, proposal_id, from_status, to_status, source, protocol, evidence, occurred_at, user_id, user_name, notes)
      values ($1,$2,$3,$4,$5,$6,$7,coalesce($8, now()),$9,$10,$11)`,
   [req.companyId, p.id, p.status, to, source, protocol, evidence, occurredAt, req.user.id, req.user.name, notes]);
@@ -79,6 +83,10 @@ r.post('/', need('proposals_manage'), async (req, res) => {
   if (payId && !pay) throw new HttpError(400, 'Forma de pagamento inválida para esta oferta.');
   const { round_id: _r, task_id: _t, created_by: _c, ...snapshot } = o;
   const p = await tx(async (db) => {
+    // uma proposta ativa por oferta: trava a oferta e confere dentro da transação (duplo clique não gera duas)
+    await db.query('select id from quote_offers where id = $1 and company_id = $2 for update', [o.id, req.companyId]);
+    const { rows: [dup] } = await db.query(`select id, number from proposals where company_id = $1 and offer_id = $2 and status not in ('retirada', 'recusada') limit 1`, [req.companyId, o.id]);
+    if (dup) throw conflict(`Já existe a proposta nº ${dup.number} para esta opção.`, { code: 'PROPOSAL_EXISTS', proposal_id: dup.id });
     const n = await nextNumber(db, req.companyId, 'proposal');
     const hash = hashOf({ snapshot, pay });
     const { rows: [x] } = await db.query(`insert into proposals (company_id, number, client_id, request_id, comparison_id, offer_id, offer_snapshot, snapshot_hash, payment_option, institution_id, connection_id, branch, created_by)
@@ -158,8 +166,7 @@ r.post('/:id/submit', need('proposals_submit'), async (req, res) => {
   const d = parse(z.object({ protocol: z.string().trim().max(120).nullable().optional(), evidence: z.string().trim().max(2000).nullable().optional(), external_proposal_number: z.string().trim().max(120).nullable().optional() }), req.body);
   const key = String(req.headers['idempotency-key'] || '');
   const out = await tx(async (db) => {
-    const p = await loadProposal(req, req.params.id, db);
-    await db.query('select id from proposals where id = $1 for update', [p.id]);
+    const p = await loadProposal(req, req.params.id, db, { lock: true });
     const { rows: [pending] } = await db.query(`select * from proposal_operations where company_id = $1 and proposal_id = $2 and kind = 'transmissao' and status in ('indeterminada','enviada')`, [req.companyId, p.id]);
     if (pending) throw conflict('Há uma transmissão com resultado indeterminado. Consulte a seguradora e registre o resultado antes de transmitir de novo.', { code: 'OPERATION_INDETERMINATE', operation_id: pending.id });
     const opKey = `tx:${p.id}:${p.snapshot_hash.slice(0, 16)}`;
@@ -224,10 +231,10 @@ r.post('/:id/status', need('proposals_manage'), async (req, res) => {
     protocol: z.string().max(120).nullable().optional(), evidence: z.string().trim().max(2000).nullable().optional(),
     occurred_at: z.string().datetime({ offset: true }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/)).nullable().optional(), source: z.enum(['manual', 'fornecedor']).default('fornecedor'), notes: z.string().max(1000).nullable().optional(),
   }), req.body);
-  const p = await loadProposal(req, req.params.id);
-  if (!(NEXT[p.status] || []).includes(d.status)) throw conflict(`Não é possível passar de "${PROPOSAL_STATUS[p.status]}" para "${PROPOSAL_STATUS[d.status]}".`);
   if (['aceita', 'recusada'].includes(d.status) && !d.evidence) throw new HttpError(400, 'Registre a evidência (aceite expresso, comunicação da seguradora ou fato documentado).');
   await tx(async (db) => {
+    const p = await loadProposal(req, req.params.id, db, { lock: true });
+    if (!(NEXT[p.status] || []).includes(d.status)) throw conflict(`Não é possível passar de "${PROPOSAL_STATUS[p.status]}" para "${PROPOSAL_STATUS[d.status]}".`, { code: 'INVALID_TRANSITION' });
     await setStatus(db, req, p, d.status, { source: d.source, protocol: d.protocol || null, evidence: d.evidence || null, notes: d.notes || null, occurredAt: d.occurred_at || null });
     if (d.status === 'aceita') await emit(db, req.companyId, 'ContractAcceptanceRecorded', 'proposal', p.id, { source: d.source }, { occurredAt: d.occurred_at || null });
     if (d.status === 'recepcionada') await emit(db, req.companyId, 'ProposalReceptionConfirmed', 'proposal', p.id, null);
@@ -244,9 +251,13 @@ r.post('/:id/status', need('proposals_manage'), async (req, res) => {
  * Divergências (prêmio, vigência, coberturas, franquias, segurado) ficam pendentes antes da conferência (A12).
  */
 r.post('/:id/policy', need('policies_manage'), async (req, res) => {
-  const p = await loadProposal(req, req.params.id);
-  if (p.status !== 'aceita') throw conflict('Registre o aceite da seguradora antes do documento contratual.');
-  const out = await tx(async (db) => createPolicyFromProposal(db, req, p, req.body));
+  const out = await tx(async (db) => {
+    // trava a proposta: duas pessoas registrando o documento ao mesmo tempo não geram duas apólices
+    const p = await loadProposal(req, req.params.id, db, { lock: true });
+    if (p.policy_id) throw conflict('Esta proposta já tem apólice registrada.', { code: 'POLICY_EXISTS', policy_id: p.policy_id });
+    if (p.status !== 'aceita') throw conflict('Registre o aceite da seguradora antes do documento contratual.');
+    return createPolicyFromProposal(db, req, p, req.body);
+  });
   res.status(201).json(out);
 });
 
