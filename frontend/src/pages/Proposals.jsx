@@ -1,9 +1,9 @@
 // Propostas (9): autorização do cliente, transmissão, recepção, aceite e emissão são fatos distintos, com histórico.
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Check, ChevronLeft, Send, ShieldCheck, FileUp, FileText, X, AlertTriangle, Plus, Trash2, History, ClipboardCheck, Undo2, Info } from 'lucide-react';
+import { Check, ChevronLeft, Send, ShieldCheck, FileUp, FileText, X, AlertTriangle, Plus, Trash2, History, ClipboardCheck, Undo2, Info, ThumbsUp, ThumbsDown } from 'lucide-react';
 import {
-  PageHeader, Section, KV, Tabs, Modal, Input, Textarea, Select, CentsInput, FileButton, StatusChip, Notice, Empty, Loading, Spinner, cx, useFetch, useAction, FAIL,
+  PageHeader, Section, KV, Tabs, Modal, Input, Textarea, Select, CentsInput, FileButton, StatusChip, Notice, Empty, Loading, Spinner, cx, useFetch, useAction, FAIL, SubmitButton,
 } from '../components/ui';
 import { useTable, SortTh, Pager } from '../components/Table';
 import { useAuth } from '../context/AuthContext';
@@ -90,11 +90,12 @@ function Stepper({ status, events }) {
               <span className={cx('h-0.5 flex-1', i === 0 ? 'invisible' : i <= cur ? 'bg-primary' : 'bg-line')} />
               <span className={cx('grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 text-xs font-semibold',
                 bad ? 'border-red-500 bg-red-500 text-white' : isCur ? 'border-primary bg-primary text-primary-fg' : done ? 'border-primary bg-primary/10 text-primary' : 'border-line bg-surface text-ink-faint')}>
-                {bad ? <X className="h-3.5 w-3.5" /> : done ? <Check className="h-3.5 w-3.5" /> : i + 1}
+                {bad ? <X className="h-3.5 w-3.5" /> : done ? <Check className="h-3.5 w-3.5" /> : skipped ? '–' : i + 1}
               </span>
               <span className={cx('h-0.5 flex-1', i === STEPS.length - 1 ? 'invisible' : i < cur ? 'bg-primary' : 'bg-line')} />
             </div>
-            <span className={cx('mt-1.5 px-1 text-[11px] leading-tight', isCur ? 'font-semibold text-ink' : skipped ? 'text-ink-faint line-through decoration-ink-faint/40' : done ? 'text-ink-soft' : 'text-ink-faint')}>{label}</span>
+            <span className={cx('mt-1.5 px-1 text-[11px] leading-tight', isCur ? 'font-semibold text-ink' : done ? 'text-ink-soft' : 'text-ink-faint')}>{label}</span>
+            {skipped && <span className="px-1 text-[10px] leading-tight text-ink-faint">{s.key === 'aprovada_internamente' ? 'não exigida pela corretora' : 'não registrada'}</span>}
           </li>
         );
       })}
@@ -174,7 +175,7 @@ export function ProposalDetail() {
 
         <Section title="Próximo passo">
           <NextActions p={p} can={can} needsInternal={needsInternal} updates={updates} pending={pendingOps.length > 0} offerExpired={offerExpired}
-            busy={busy} onApprove={approve} open={(kind) => { setErr(null); setModal({ kind }); }} />
+            busy={busy} onApprove={approve} open={(kind, initial) => { setErr(null); setModal({ kind, initial }); }} />
         </Section>
 
         <div className="grid gap-5 lg:grid-cols-3">
@@ -264,7 +265,7 @@ export function ProposalDetail() {
       {modal?.kind === 'authorize' && <AuthorizeModal p={p} onClose={() => setModal(null)} onDone={done} onError={handle} />}
       {modal?.kind === 'submit' && <SubmitModal p={p} onClose={() => setModal(null)} onDone={done} onError={handle} onIndeterminate={() => { setModal(null); reload(); }} />}
       {modal?.kind === 'resolve' && <ResolveModal p={p} op={modal.op} onClose={() => setModal(null)} onDone={done} />}
-      {modal?.kind === 'status' && <StatusModal p={p} options={updates} onClose={() => setModal(null)} onDone={done} />}
+      {modal?.kind === 'status' && <StatusModal p={p} options={updates} initial={modal.initial} onClose={() => setModal(null)} onDone={done} />}
       {modal?.kind === 'policy' && <PolicyModal p={p} onClose={() => setModal(null)} onDone={reload} />}
     </>
   );
@@ -279,18 +280,23 @@ function NextActions({ p, can, needsInternal, updates, pending, offerExpired, bu
   if (p.status === 'aprovada_internamente' && can('proposals_manage')) items.push(<button key="au" className="btn-primary" disabled={offerExpired} onClick={() => open('authorize')}><ShieldCheck className="h-4 w-4" />Registrar autorização do cliente</button>);
   if (p.status === 'autorizada_cliente' && can('proposals_submit')) items.push(<button key="tx" className="btn-primary" disabled={pending || offerExpired} onClick={() => open('submit')}><Send className="h-4 w-4" />Transmitir à seguradora</button>);
   if (p.status === 'aceita' && can('policies_manage')) items.push(<button key="pol" className="btn-primary" onClick={() => open('policy')}><FileUp className="h-4 w-4" />Registrar documento contratual (apólice)</button>);
+  // atalhos da decisão da seguradora (abrem o mesmo registro, já com o estado escolhido)
+  if (can('proposals_manage') && updates.includes('aceita')) {
+    items.push(<button key="ok" className="btn-primary" onClick={() => open('status', 'aceita')}><ThumbsUp className="h-4 w-4" />Seguradora aceitou</button>);
+    if (updates.includes('recusada')) items.push(<button key="no" className="btn-outline" onClick={() => open('status', 'recusada')}><ThumbsDown className="h-4 w-4" />Seguradora recusou</button>);
+  }
   if (updates.length && can('proposals_manage')) {
     const onlyWithdraw = updates.length === 1 && updates[0] === 'retirada';
     items.push(<button key="st" className={onlyWithdraw ? 'btn-ghost text-red-600' : 'btn-outline'} onClick={() => open('status')}>
-      {onlyWithdraw ? <><Undo2 className="h-4 w-4" />Retirar proposta</> : <><ClipboardCheck className="h-4 w-4" />Registrar andamento da seguradora</>}</button>);
+      {onlyWithdraw ? <><Undo2 className="h-4 w-4" />Retirar proposta</> : <><ClipboardCheck className="h-4 w-4" />{updates.includes('aceita') ? 'Outro andamento' : 'Registrar andamento da seguradora'}</>}</button>);
   }
   const hint = {
     rascunho: needsInternal ? 'A política da corretora exige aprovação interna antes da autorização do cliente.' : 'Registre a autorização do cliente para esta opção exata (ou aprove internamente, se for o caso).',
     aprovada_internamente: 'Aguardando a autorização do cliente para a versão exata.',
     autorizada_cliente: 'Pronta para transmissão. Sem conector com transmissão ativa, a transmissão é assistida pelo canal oficial da seguradora.',
-    transmitida: 'Aguardando a recepção pela seguradora.',
-    recepcionada: 'Recepcionada pela seguradora; acompanhe a análise.',
-    em_analise: 'Em análise de subscrição na seguradora.',
+    transmitida: 'Aguardando a seguradora. Quando ela responder, registre aqui — dá para ir direto para “aceita” ou “recusada”, sem passar pelas etapas intermediárias.',
+    recepcionada: 'Recepcionada pela seguradora; registre a decisão quando sair.',
+    em_analise: 'Em análise de subscrição na seguradora; registre a decisão quando sair.',
     aceita: 'Aceita pela seguradora. Aceite e emissão são fatos distintos: registre o documento contratual quando chegar.',
     recusada: 'Recusada pela seguradora (com evidência).',
     retirada: 'Proposta retirada.',
@@ -364,7 +370,8 @@ function AuthorizeModal({ p, onClose, onDone, onError }) {
   };
   return (
     <Modal open onClose={onClose} title="Registrar autorização do cliente" subtitle="Para a opção exata desta proposta."
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={busy || name.trim().length < 2 || evidence.trim().length < 5} onClick={submit}>Registrar autorização</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={submit}
+        problems={[name.trim().length < 2 && { text: 'Informe o nome de quem autorizou.', field: 'Nome de quem autorizou' }, evidence.trim().length < 5 && { text: 'Descreva a evidência da autorização (mín. 5 caracteres).', field: 'Evidência' }]}>Registrar autorização</SubmitButton></>}>
       <div className="space-y-3">
         <div className="rounded-app-sm bg-muted px-3 py-2.5 text-sm">
           <b>{p.institution_name} — {p.offer_snapshot?.product_name}</b>
@@ -429,7 +436,8 @@ function ResolveModal({ p, op, onClose, onDone }) {
   };
   return (
     <Modal open onClose={onClose} title="Resultado da transmissão indeterminada" subtitle="Registre o que a seguradora informou após a consulta."
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={busy || evidence.trim().length < 5} onClick={submit}>Registrar</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={submit}
+        problems={evidence.trim().length < 5 ? [{ text: 'Descreva a evidência da consulta (mín. 5 caracteres).', field: 'Evidência da consulta' }] : []}>Registrar</SubmitButton></>}>
       <div className="space-y-3">
         <Select label="Resultado confirmado com a seguradora" value={result} onChange={(e) => setResult(e.target.value)}>
           <option value="confirmada">A seguradora recebeu a proposta</option>
@@ -442,9 +450,9 @@ function ResolveModal({ p, op, onClose, onDone }) {
   );
 }
 
-function StatusModal({ p, options, onClose, onDone }) {
+function StatusModal({ p, options, initial, onClose, onDone }) {
   const [run, busy] = useAction();
-  const [status, setStatus] = useState(options[0]);
+  const [status, setStatus] = useState(initial && options.includes(initial) ? initial : options[0]);
   const [protocol, setProtocol] = useState('');
   const [evidence, setEvidence] = useState('');
   const [occurred, setOccurred] = useState('');
@@ -459,7 +467,8 @@ function StatusModal({ p, options, onClose, onDone }) {
   };
   return (
     <Modal open onClose={onClose} title="Registrar andamento" subtitle={`Situação atual: ${PROPOSAL_STATUS[p.status]?.label}`}
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className={status === 'retirada' ? 'btn-danger' : 'btn-primary'} disabled={busy || (needsEvidence && evidence.trim().length < 3)} onClick={submit}>Registrar</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton className={status === 'retirada' ? 'btn-danger' : 'btn-primary'} busy={busy} onClick={submit}
+        problems={needsEvidence && evidence.trim().length < 3 ? [{ text: `Informe a evidência ${status === 'aceita' ? 'do aceite' : 'da recusa'} (ex.: e-mail da seguradora de 06/10).`, field: 'Evidência' }] : []}>Registrar</SubmitButton></>}>
       <div className="space-y-3">
         <Select label="Novo estado" value={status} onChange={(e) => setStatus(e.target.value)}>
           {options.map((s) => <option key={s} value={s}>{PROPOSAL_STATUS[s]?.label || s}</option>)}
@@ -486,25 +495,27 @@ const addMonths = (d, n) => { const x = new Date(`${d}T12:00:00`); x.setMonth(x.
 function PolicyModal({ p, onClose, onDone }) {
   const [run, busy] = useAction();
   const snap = p.offer_snapshot || {};
-  const [f, setF] = useState({ policy_number: '', certificate_number: '', start_date: '', end_date: '', total_premium_cents: snap.total_premium_cents ?? null, premium_net_cents: snap.premium_net_cents ?? null, taxes_cents: snap.taxes_cents ?? null, notes: '' });
+  // vigência sugerida = a pedida na cotação; sem ela, 1 ano a partir de hoje (confira no documento)
+  const startSug = p.period?.start || ymd();
+  const endSug = p.period?.end || addMonths(startSug, 12);
+  const [f, setF] = useState({ policy_number: '', certificate_number: '', start_date: startSug, end_date: endSug, total_premium_cents: snap.total_premium_cents ?? null, premium_net_cents: snap.premium_net_cents ?? null, taxes_cents: snap.taxes_cents ?? null, notes: '' });
   const [covs, setCovs] = useState(() => (snap.coverages || []).map((c) => ({ code: c.code, name: c.name, limit_cents: c.limit_cents ?? null, deductible_text: c.deductible_text || '', deductible_cents: c.deductible_cents ?? null })));
-  const [inst, setInst] = useState([]);
+  const planInstallments = (base) => {
+    const po = p.payment_option;
+    const n = po?.installments || 1;
+    return Array.from({ length: n }, (_, i) => ({
+      number: i + 1, due_date: addMonths(base || ymd(), i),
+      amount_cents: po ? (i === 0 ? po.first_cents ?? po.installment_cents ?? po.total_cents : po.installment_cents) ?? null : snap.total_premium_cents ?? null, charge_url: '',
+    }));
+  };
+  const [inst, setInst] = useState(() => planInstallments(startSug));
   const [insured, setInsured] = useState(null);
   const [payer, setPayer] = useState(null);
   const [result, setResult] = useState(null);
   const up = useUpload(p, 'apolice');
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
-  const genInstallments = () => {
-    const po = p.payment_option;
-    const n = po?.installments || 1;
-    const base = f.start_date || ymd();
-    setInst(Array.from({ length: n }, (_, i) => ({
-      number: i + 1, due_date: addMonths(base, i),
-      amount_cents: po ? (i === 0 ? po.first_cents ?? po.installment_cents ?? po.total_cents : po.installment_cents) ?? null : f.total_premium_cents, charge_url: '',
-    })));
-  };
+  const genInstallments = () => setInst(planInstallments(f.start_date));
   const instSum = inst.reduce((a, x) => a + (x.amount_cents || 0), 0);
-  const ok = f.policy_number.trim() && f.start_date && f.end_date && f.end_date > f.start_date && f.total_premium_cents != null && inst.every((x) => x.due_date && x.amount_cents > 0);
 
   const submit = async () => {
     const body = {
@@ -530,14 +541,23 @@ function PolicyModal({ p, onClose, onDone }) {
 
   return (
     <Modal open size="xl" onClose={onClose} title="Registrar documento contratual (apólice)" subtitle="Transcreva o documento emitido; o sistema compara com a versão autorizada."
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!ok || busy} onClick={submit}>Registrar apólice</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={submit} problems={[
+        !f.policy_number.trim() && { text: 'Informe o número da apólice.', field: 'Número da apólice' },
+        !f.start_date && { text: 'Informe o início de vigência.', field: 'Início de vigência' },
+        !f.end_date && { text: 'Informe o fim de vigência.', field: 'Fim de vigência' },
+        f.start_date && f.end_date && f.end_date <= f.start_date && { text: 'O fim da vigência deve ser posterior ao início.', field: 'Fim de vigência' },
+        f.total_premium_cents == null && { text: 'Informe o prêmio total emitido.', field: 'Prêmio total emitido' },
+        ...inst.map((x, i) => (!x.due_date || !(x.amount_cents > 0)) && { text: `Parcela ${x.number || i + 1}: informe vencimento e valor (ou remova a linha).`, field: `#inst-due-${i}` }),
+      ]}>Registrar apólice</SubmitButton></>}>
       <div className="space-y-5">
         <Notice>Informe os dados <b>como emitidos</b> pela seguradora, mesmo que diferentes do autorizado: divergências de prêmio, vigência, coberturas, franquias e segurado ficam pendentes antes da conferência.</Notice>
         <div className="grid gap-4 sm:grid-cols-2">
           <Input label="Número da apólice *" value={f.policy_number} onChange={(e) => set('policy_number', e.target.value)} />
           <Input label="Número do certificado" value={f.certificate_number} onChange={(e) => set('certificate_number', e.target.value)} />
-          <Input label="Início de vigência *" type="date" value={f.start_date} onChange={(e) => set('start_date', e.target.value)} />
-          <Input label="Fim de vigência *" type="date" value={f.end_date} onChange={(e) => set('end_date', e.target.value)} />
+          <Input label="Início de vigência *" type="date" value={f.start_date} onChange={(e) => set('start_date', e.target.value)}
+            hint={f.start_date === startSug ? (p.period?.start ? 'Sugerido pela vigência pedida na cotação — confira no documento.' : 'Sugestão: hoje — confira no documento.') : undefined} />
+          <Input label="Fim de vigência *" type="date" value={f.end_date} onChange={(e) => set('end_date', e.target.value)}
+            hint={f.end_date === endSug ? 'Sugerido — confira no documento.' : undefined} />
           <CentsInput label="Prêmio total emitido *" value={f.total_premium_cents} onChange={(v) => set('total_premium_cents', v)} hint={`Autorizado: ${money(snap.total_premium_cents)}`} />
           <DocSlot label="Arquivo da apólice" up={up} />
           <CentsInput label="Prêmio líquido" value={f.premium_net_cents} onChange={(v) => set('premium_net_cents', v)} />
@@ -566,7 +586,7 @@ function PolicyModal({ p, onClose, onDone }) {
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-semibold">Parcelas do prêmio (pagas à seguradora)</h3>
             <div className="flex gap-2">
-              <button className="btn-ghost text-sm" onClick={genInstallments}>Gerar pela forma de pagamento</button>
+              <button className="btn-ghost text-sm" onClick={genInstallments}>Recalcular pela forma de pagamento</button>
               <button className="btn-ghost text-sm" onClick={() => setInst((l) => [...l, { number: l.length + 1, due_date: '', amount_cents: null, charge_url: '' }])}><Plus className="h-4 w-4" />Parcela</button>
             </div>
           </div>
@@ -575,7 +595,7 @@ function PolicyModal({ p, onClose, onDone }) {
               {inst.map((x, i) => (
                 <div key={i} className="grid items-end gap-3 rounded-app-sm border border-line p-3 sm:grid-cols-[4rem_1fr_1fr_2fr_auto]">
                   <Input label="Nº" type="number" min={1} value={x.number} onChange={(e) => setInst((l) => l.map((y, j) => (j === i ? { ...y, number: Number(e.target.value) || 1 } : y)))} />
-                  <Input label="Vencimento" type="date" value={x.due_date} onChange={(e) => setInst((l) => l.map((y, j) => (j === i ? { ...y, due_date: e.target.value } : y)))} />
+                  <Input id={`inst-due-${i}`} label="Vencimento" type="date" value={x.due_date} onChange={(e) => setInst((l) => l.map((y, j) => (j === i ? { ...y, due_date: e.target.value } : y)))} />
                   <CentsInput label="Valor" value={x.amount_cents} onChange={(v) => setInst((l) => l.map((y, j) => (j === i ? { ...y, amount_cents: v } : y)))} />
                   <Input label="Link oficial de pagamento" placeholder="https://" value={x.charge_url} onChange={(e) => setInst((l) => l.map((y, j) => (j === i ? { ...y, charge_url: e.target.value } : y)))} />
                   <button className="btn-ghost btn-icon mb-0.5" aria-label="Remover parcela" onClick={() => setInst((l) => l.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4" /></button>
@@ -585,6 +605,7 @@ function PolicyModal({ p, onClose, onDone }) {
                 Soma das parcelas: {money(instSum)}{f.total_premium_cents != null && instSum !== f.total_premium_cents ? ` — difere do prêmio total (${money(f.total_premium_cents)})` : ''}</p>
             </div>
           ) : <p className="text-xs text-ink-faint">Sem parcelas informadas. Você pode registrá-las depois na apólice.</p>}
+          {inst.length > 0 && p.payment_option && <p className="mt-1 text-xs text-ink-faint">Parcelas sugeridas pela forma de pagamento escolhida ({PAY_METHOD[p.payment_option.method] || p.payment_option.method} {p.payment_option.installments}x), com vencimento mensal a partir do início da vigência. Ajuste conforme o documento.</p>}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">

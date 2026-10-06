@@ -117,10 +117,13 @@ r.get('/:id', need('quotes_view'), async (req, res) => {
     q('select * from customer_authorizations where company_id = $1 and proposal_id = $2 order by authorized_at', [req.companyId, p.id]),
   ]);
   const offer = await one('select status, valid_until from quote_offers where id = $1', [p.offer_id]);
+  // vigência pretendida da rodada (sugestão ao registrar a apólice)
+  const period = await one(`select to_char(r.start_date, 'YYYY-MM-DD') as start, to_char(r.end_date, 'YYYY-MM-DD') as "end"
+     from quote_offers o join quote_rounds r on r.id = o.round_id where o.id = $1`, [p.offer_id]);
   const snap = { ...p.offer_snapshot };
   if (!req.perms.commissions_view || req.perms.commissions_view === 'none') { snap.commission_rate = null; snap.commission_source = null; }
   res.json({ ...p, offer_snapshot: snap, number_label: docNumber(req.settings, 'proposal', p.number), status_label: PROPOSAL_STATUS[p.status], branch_label: BRANCHES[p.branch],
-    offer_current: offer, events: events.rows, operations: ops.rows, authorizations: auths.rows, statuses: PROPOSAL_STATUS, next: NEXT[p.status] || [] });
+    offer_current: offer, period: period || null, events: events.rows, operations: ops.rows, authorizations: auths.rows, statuses: PROPOSAL_STATUS, next: NEXT[p.status] || [] });
 });
 
 r.post('/:id/approve-internal', need('proposals_approve'), async (req, res) => {
@@ -144,6 +147,9 @@ r.post('/:id/authorizations', need('proposals_manage'), async (req, res) => {
   const allowed = req.settings.approvals.internalProposalApproval ? ['aprovada_internamente'] : ['rascunho', 'aprovada_internamente'];
   if (!allowed.includes(p.status)) throw conflict(p.status === 'rascunho' ? 'A proposta precisa de aprovação interna antes da autorização do cliente.' : 'A proposta não está aguardando autorização.');
   const offer = await one('select status, valid_until from quote_offers where id = $1', [p.offer_id]);
+  // vigência pretendida da rodada (sugestão ao registrar a apólice)
+  const period = await one(`select to_char(r.start_date, 'YYYY-MM-DD') as start, to_char(r.end_date, 'YYYY-MM-DD') as "end"
+     from quote_offers o join quote_rounds r on r.id = o.round_id where o.id = $1`, [p.offer_id]);
   if (offer.status !== 'ativa' || (offer.valid_until && offer.valid_until < today(req.settings.timezone))) throw conflict('A cotação desta proposta venceu ou foi retirada: recalcule antes de pedir autorização.', { code: 'QUOTE_EXPIRED' });
   if (d.evidence_document_id) await own('documents', d.evidence_document_id, req.companyId, 'id');
   await tx(async (db) => {
