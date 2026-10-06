@@ -213,12 +213,12 @@ export function SubmitButton({ problems = [], onClick, busy, className = 'btn-pr
       {shown && list.length > 0 && (
         <div id={probId} role="alert" className="order-first mr-auto w-full rounded-app-sm border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100 sm:w-auto sm:max-w-[60%]">
           <b className="block">Falta {list.length === 1 ? '1 item' : `${list.length} itens`} para continuar:</b>
-          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+          <ul className="mt-1 space-y-0.5">
             {list.map((x, i) => (
-              <li key={i}>{x.field
+              <li key={i} className="flex gap-1.5"><span aria-hidden>•</span>{x.field
                 ? <button type="button" className="inline text-left underline decoration-dotted underline-offset-2 hover:decoration-solid"
                     onClick={() => focusField(x.field, ref.current?.closest('[role="dialog"]') || document)}>{x.text}</button>
-                : x.text}</li>
+                : <span>{x.text}</span>}</li>
             ))}
           </ul>
         </div>

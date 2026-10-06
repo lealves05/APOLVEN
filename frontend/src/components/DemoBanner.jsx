@@ -25,10 +25,11 @@ export default function DemoBanner() {
 }
 
 function ActivateModal({ onClose }) {
-  const { activate } = useAuth();
+  const { activate, user } = useAuth();
+  const realEmail = user?.email && !/@demo\.apolven\.app$/i.test(user.email);
   const { toast } = useUI();
   const [run, busy] = useAction();
-  const [f, setF] = useState({ companyName: '', name: '', email: '', password: '', phone: '', keepData: false });
+  const [f, setF] = useState({ companyName: '', name: realEmail ? user.name || '' : '', email: realEmail ? user.email : '', password: '', phone: '', keepData: false });
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const go = async () => {
     const r = await run(() => activate(f));

@@ -59,7 +59,7 @@ export function AuthProvider({ children }) {
         enter(s, remember);
       },
       async register(data) { enter(await api.post('/auth/register', data), false); },
-      async demo() { enter(await api.post('/auth/demo', {}), false); },
+      async demo(creds) { enter(await api.post('/auth/demo', creds), false); },
       async activate(data) { enter(await api.post('/auth/activate', data), false); },
       /** Sessão nova devolvida por troca de senha / MFA. */
       replaceSession(s) { if (s?.token) setToken(s.token); setState((st) => ({ ...st, ...s, loading: false })); },

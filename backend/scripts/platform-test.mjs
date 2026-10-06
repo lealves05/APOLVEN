@@ -136,11 +136,21 @@ await check('esqueci minha senha pela central: uso único e derruba sessões', a
 });
 await check('demonstração não entra na central; cadastros fechados pela central', async () => {
   const n = hubCalls.filter((c) => c.route === '/tenants').length;
-  assert.equal((await api('POST', '/auth/demo')).status, 201);
+  // sem credenciais a demonstração não cria conta
+  assert.equal((await api('POST', '/auth/demo')).status, 400);
+  assert.equal((await api('POST', '/auth/demo', { name: 'Visitante', email: 'demo1@teste.dev' })).status, 400);
+  assert.equal((await api('POST', '/auth/demo', { name: 'Visitante', email: 'invalido', password: 'Corretora2026xy' })).status, 400);
+  const dm = await api('POST', '/auth/demo', { name: 'Visitante Demo', email: 'demo1@teste.dev', password: 'Corretora2026xy' });
+  assert.equal(dm.status, 201);
+  assert.equal(dm.data.company.is_demo, true);
+  assert.equal(dm.data.user.email, 'demo1@teste.dev');
+  // e-mail único e login real para voltar depois
+  assert.equal((await api('POST', '/auth/demo', { name: 'Outro', email: 'demo1@teste.dev', password: 'Corretora2026xy' })).status, 409);
+  assert.equal((await api('POST', '/auth/login', { email: 'demo1@teste.dev', password: 'Corretora2026xy' })).status, 200);
   assert.equal(hubCalls.filter((c) => c.route === '/tenants').length, n);
   await central('PUT', '/settings', { values: { signup_enabled: false, demo_enabled: false } });
   assert.equal((await api('POST', '/auth/register', { companyName: 'Fechada', name: 'Xavier', email: 'x@teste.dev', password: 'Corretora2026xy' })).status, 403);
-  assert.equal((await api('POST', '/auth/demo')).status, 403);
+  assert.equal((await api('POST', '/auth/demo', { name: 'Visitante', email: 'demo2@teste.dev', password: 'Corretora2026xy' })).status, 403);
   await central('PUT', '/settings', { values: { signup_enabled: true, demo_enabled: true } });
 });
 await check('CORS só para origem aprovada; API sem cache; segredo fraco recusado', async () => {

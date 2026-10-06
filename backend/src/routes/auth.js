@@ -189,7 +189,7 @@ r.post('/forgot', forgotLimiter, async (req, res) => {
   try { await limitByKey('forgot', d.email, 3, 60 * 60); } catch { return res.json(GENERIC_FORGOT); }
   const u = await one(`select u.id, u.name, u.email, u.company_id, c.name as company_name, c.is_demo from users u join companies c on c.id = u.company_id
      where u.email = $1 and u.active`, [d.email]);
-  if (!u || u.is_demo) return res.json(GENERIC_FORGOT);
+  if (!u || (u.is_demo && /@demo\.apolven\.app$/i.test(u.email))) return res.json(GENERIC_FORGOT);
   const token = crypto.randomBytes(32).toString('hex');
   await q('update password_resets set used_at = now() where user_id = $1 and used_at is null', [u.id]);
   await q(`insert into password_resets (user_id, token_hash, expires_at, ip) values ($1,$2, now() + make_interval(mins => $3), $4)`,
@@ -247,22 +247,32 @@ r.put('/me', requireAuth, async (req, res) => {
 // ---------- Versão de demonstração ----------
 const demoLimiter = limitByIp('demo', 10, 60 * 60, 'Muitas demonstrações criadas a partir deste endereço. Tente mais tarde.');
 
-r.post('/demo', demoLimiter, async (_req, res) => {
+/** Dados obrigatórios para abrir uma demonstração: a pessoa entra com o próprio login (e-mail + senha). */
+export const demoSchema = z.object({
+  name: z.string({ required_error: 'informe seu nome' }).trim().min(2, 'informe seu nome').max(120),
+  email: z.string({ required_error: 'informe o e-mail (será o seu login)' }).trim().toLowerCase().email('e-mail inválido').max(200),
+  password: z.string({ required_error: 'crie uma senha' }).pipe(passwordSchema),
+  companyName: z.string().trim().max(120).optional(),
+});
+
+r.post('/demo', demoLimiter, async (req, res) => {
   const sys = await getSystemParams();
   if (sys.demo_enabled === false) throw new HttpError(403, 'A demonstração está desativada no momento.');
+  const d = parse(demoSchema, req.body);
   await q('delete from companies where is_demo and created_at < now() - make_interval(days => $1)', [Number(sys.demo_days) || 7]).catch(() => {});
+  if (await one('select 1 from users where email = $1', [d.email])) throw new HttpError(409, 'Este e-mail já está cadastrado. Entre com ele ou use "Esqueci minha senha".');
   const rand = Math.random().toString(36).slice(2, 10);
-  const email = `demo-${rand}@demo.apolven.app`;
-  const hash = await bcrypt.hash(`${rand}${Date.now()}`, 8);
+  const hash = await bcrypt.hash(d.password, 10);
+  // e-mail único também sob concorrência (dois envios simultâneos)
   const userId = await tx(async (db) => {
-    const company = await createCompany(db, { name: 'Corretora Demonstração', isDemo: true, slugBase: `demo-${rand}` });
+    const company = await createCompany(db, { name: d.companyName || 'Corretora Demonstração', email: d.email, isDemo: true, slugBase: `demo-${rand}` });
     const { rows: [unit] } = await db.query('select id from units where company_id = $1', [company.id]);
     const { rows: [user] } = await db.query(
-      `insert into users (company_id, unit_id, name, email, password_hash, role) values ($1,$2,'Visitante',$3,$4,'owner') returning id`,
-      [company.id, unit.id, email, hash]);
+      `insert into users (company_id, unit_id, name, email, password_hash, role) values ($1,$2,$3,$4,$5,'owner') returning id`,
+      [company.id, unit.id, d.name, d.email, hash]);
     await seedDemo(db, company.id, user.id);
     return user.id;
-  });
+  }).catch((e) => { if (e.code === '23505') throw new HttpError(409, 'Este e-mail já está cadastrado. Entre com ele ou use "Esqueci minha senha".'); throw e; });
   res.status(201).json(await sessionWithToken(userId));
 });
 

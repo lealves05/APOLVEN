@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { Calculator, Wallet, FileCheck2, PlugZap, Building2, PlayCircle, LogIn, Loader2, ArrowRight, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
-import { Input, cx } from '../components/ui';
+import { Input, cx, SubmitButton } from '../components/ui';
 import { Logo } from '../components/Layout';
 import { maskPhone, maskDoc } from '../lib/format';
 import { api } from '../lib/api';
@@ -57,26 +57,65 @@ function ModeTabs({ mode }) {
 }
 
 function DemoCard() {
-  const { demo } = useAuth();
-  const { toast } = useUI();
-  const [busy, setBusy] = useState(false);
-  const start = async () => {
-    setBusy(true);
-    try { await demo(); toast('Demonstração pronta! Explore à vontade — nada aqui é real.'); } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
-  };
+  const nav = useNavigate();
   return (
     <div className="mt-6 rounded-app border border-dashed border-primary/40 bg-primary/5 p-4">
       <div className="flex items-start gap-3">
         <PlayCircle className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold">Quer só conhecer o sistema?</div>
-          <p className="mt-0.5 text-xs text-ink-soft">Abra uma demonstração com clientes, apólices, cotações, parcelas e comissões fictícias, sem cadastro. Quando quiser, ative o uso normal com os seus dados.</p>
-          <button className="btn-outline mt-3 w-full border-primary/40 text-primary" disabled={busy} onClick={start}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />} {busy ? 'Preparando a demonstração…' : 'Experimentar a demonstração'}
+          <p className="mt-0.5 text-xs text-ink-soft">Abra uma demonstração com clientes, apólices, cotações, parcelas e comissões fictícias. Você cria um login (e-mail e senha) para voltar quando quiser e, depois, ativa o uso normal com os seus dados.</p>
+          <button className="btn-outline mt-3 w-full border-primary/40 text-primary" onClick={() => nav('/demonstracao')}>
+            <PlayCircle className="h-4 w-4" /> Experimentar a demonstração
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+/** Demonstração com login próprio: nome, e-mail e senha (mesma política do cadastro). */
+export function DemoSignup() {
+  const { demo } = useAuth();
+  const { toast } = useUI();
+  const nav = useNavigate();
+  const [f, setF] = useState({ name: '', email: '', password: '', confirm: '' });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const problems = [
+    f.name.trim().length < 2 && { text: 'Informe seu nome.', field: 'Seu nome' },
+    !/^\S+@\S+\.\S+$/.test(f.email.trim()) && { text: 'Informe um e-mail válido (será o seu login).', field: 'E-mail' },
+    f.password.length < 10 && { text: 'A senha precisa de no mínimo 10 caracteres, com letras e números.', field: 'Senha' },
+    f.password.length >= 10 && !(/[a-z]/i.test(f.password) && /\d/.test(f.password)) && { text: 'Use letras e números na senha.', field: 'Senha' },
+    f.confirm !== f.password && { text: 'A confirmação da senha não confere.', field: 'Repita a senha' },
+  ];
+  const submit = async () => {
+    setBusy(true); setErr('');
+    try {
+      await demo({ name: f.name.trim(), email: f.email.trim(), password: f.password });
+      toast('Demonstração pronta! Os dados são fictícios; seu login vale para voltar depois.');
+      nav('/');
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <Shell>
+      <h1 className="text-2xl font-semibold tracking-tight">Experimentar a demonstração</h1>
+      <p className="mt-1 text-sm text-ink-faint">Crie seu login para entrar e voltar à demonstração quando quiser. Os dados de exemplo são fictícios e a demonstração é apagada após alguns dias sem ativação.</p>
+      <form className="mt-6 space-y-4" onSubmit={(e) => { e.preventDefault(); if (!problems.some(Boolean)) submit(); }} noValidate>
+        <Input label="Seu nome" autoComplete="name" value={f.name} onChange={set('name')} />
+        <Input label="E-mail (será o seu login)" type="email" autoComplete="email" value={f.email} onChange={set('email')} />
+        <Input label="Senha" type="password" autoComplete="new-password" value={f.password} onChange={set('password')} hint="Mínimo de 10 caracteres, com letras e números" />
+        <Input label="Repita a senha" type="password" autoComplete="new-password" value={f.confirm} onChange={set('confirm')} />
+        {err && <div role="alert" className="rounded-app-sm border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-800 dark:text-red-200">{err}{/cadastrado/i.test(err) && <> <Link to="/entrar" className="font-medium underline">Entrar</Link></>}</div>}
+        <div className="flex flex-col gap-2">
+          <SubmitButton className="btn-primary w-full" busy={busy} problems={problems} onClick={submit}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />} {busy ? 'Preparando a demonstração…' : 'Abrir a demonstração'}
+          </SubmitButton>
+        </div>
+      </form>
+      <p className="mt-4 text-center text-sm text-ink-faint">Já tem login? <Link to="/entrar" className="font-medium text-primary hover:underline">Entrar</Link></p>
+    </Shell>
   );
 }
 

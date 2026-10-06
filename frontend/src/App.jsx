@@ -4,7 +4,7 @@ import { useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import { Loading } from './components/ui';
 import { BlockedScreen } from './components/Billing';
-import { Login, Register, ForgotPassword, ResetPassword } from './pages/Auth';
+import { Login, Register, ForgotPassword, ResetPassword, DemoSignup } from './pages/Auth';
 import Account, { MfaRequiredScreen } from './pages/Account';
 import Subscription from './pages/Subscription';
 import Dashboard from './pages/Dashboard';
@@ -65,6 +65,7 @@ export default function App() {
         <>
           <Route path="/entrar" element={<Login />} />
           <Route path="/cadastro" element={<Register />} />
+          <Route path="/demonstracao" element={<DemoSignup />} />
           <Route path="*" element={<Navigate to="/entrar" replace />} />
         </>
       ) : mfaSetup ? (
