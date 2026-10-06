@@ -6,6 +6,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Plus, Search, X, Play, RefreshCw, FileUp, FileText, Ban, Check, AlertTriangle, Copy, MessageCircle, Printer, Link2, Send,
   ChevronRight, ChevronLeft, Trophy, ShieldCheck, Coins, Info, Trash2, Undo2, ExternalLink, Calculator,
+  CheckCircle2, Clock, XCircle, Hourglass, CircleDashed, Zap, Hand, FileJson,
 } from 'lucide-react';
 import {
   PageHeader, Section, KV, Tabs, Stat, Modal, PromptModal, Input, Textarea, Select, Toggle, CentsInput, FileButton, StatusChip, Notice,
@@ -579,12 +580,11 @@ function RoundErrorNotice({ err, clientId }) {
 const HANDLED = ['INSUFFICIENT_DATA', 'NO_ELIGIBLE_SOURCE', 'CONSENT_REVOKED', 'CONSENT_REQUIRED'];
 
 // ================= Nova cotação =================
-const STEPS = ['Cliente e ramo', 'Dados do risco', 'Coberturas e preferências', 'Fontes e envio'];
+const STEPS = ['Cliente e ramo', 'Dados do risco', 'Coberturas e preferências', 'Fontes e envio', 'Resultados'];
 
 export function QuoteNew() {
   const { meta, branchLabel } = useAuth();
   const [sp] = useSearchParams();
-  const nav = useNavigate();
   const [run, busy] = useAction();
   const [step, setStep] = useState(0);
   const [client, setClient] = useState(null);
@@ -601,6 +601,10 @@ export function QuoteNew() {
   const [sharing, setSharing] = useState('');
   const [err, setErr] = useState(null);
   const [highlight, setHighlight] = useState([]);
+  const [createdId, setCreatedId] = useState(null);
+  const stepsRef = useRef(null);
+  // no celular a faixa de etapas rola: mantém a etapa atual visível
+  useEffect(() => { stepsRef.current?.querySelector('[aria-current="step"]')?.scrollIntoView?.({ block: 'nearest', inline: 'center' }); }, [step]);
   const opportunity = sp.get('opportunity');
   const renewal = sp.get('renewal');
 
@@ -660,12 +664,13 @@ export function QuoteNew() {
       risk, min_coverages: covs, preferences: prefsPayload(prefs), start_date: start || null, end_date: end || null,
       sources: sources === 'all' ? [] : sources, scenarios, sharing_basis: sharing.trim(),
     };
-    const r = await run(() => api.post('/v1/quote-requests', body), 'Cotação criada. As tarefas foram distribuídas às fontes.', (e) => {
+    const r = await run(() => api.post('/v1/quote-requests', body), 'Cotação enviada. Acompanhe as respostas das seguradoras.', (e) => {
       setErr(e);
       if (e.code === 'INSUFFICIENT_DATA') { setHighlight(e.data?.missing || []); setStep(1); }
       return HANDLED.includes(e.code);
     });
-    if (r !== FAIL) nav(`/cotacoes/${r.request.id}`);
+    // etapa 5: resultados ao vivo (a rodada criada é imutável — não se volta para editar)
+    if (r !== FAIL) { setCreatedId(r.request.id); setStep(4); }
   };
 
   return (
@@ -674,10 +679,10 @@ export function QuoteNew() {
         actions={<Link to="/cotacoes" className="btn-ghost"><ChevronLeft className="h-4 w-4" />Cotações</Link>} />
       {(opportunity || renewal) && <Notice className="mb-4">{renewal ? 'Cotação de renovação: vinculada à apólice atual.' : 'Cotação vinculada à oportunidade.'}</Notice>}
 
-      <ol className="mb-5 flex gap-2 overflow-x-auto pb-1" aria-label="Etapas">
+      <ol ref={stepsRef} className="mb-5 flex gap-2 overflow-x-auto pb-1" aria-label="Etapas">
         {STEPS.map((s, i) => (
           <li key={s}>
-            <button type="button" onClick={() => i < step && setStep(i)} disabled={i > step}
+            <button type="button" onClick={() => i < step && !createdId && setStep(i)} disabled={i > step || (!!createdId && i !== step)}
               className={cx('flex items-center gap-2 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm', i === step ? 'border-primary bg-primary text-primary-fg' : i < step ? 'border-primary/40 text-primary' : 'border-line text-ink-faint')}
               aria-current={i === step ? 'step' : undefined}>
               <span className="grid h-5 w-5 place-items-center rounded-full bg-black/10 text-xs">{i < step ? <Check className="h-3 w-3" /> : i + 1}</span>{s}
@@ -754,14 +759,198 @@ export function QuoteNew() {
           </>
         )}
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <button className="btn-ghost mr-auto" disabled={step === 0} onClick={() => setStep((s) => s - 1)}><ChevronLeft className="h-4 w-4" />Voltar</button>
-          {step < 3
-            ? <SubmitButton problems={stepProblems[step]} onClick={goNext} onMouseDown={() => step === 1 && missing.length && setHighlight(missing)}>Avançar<ChevronRight className="h-4 w-4" /></SubmitButton>
-            : <SubmitButton busy={busy} problems={stepProblems[3]} onClick={submit}>{busy ? <Spinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}Criar cotação e distribuir</SubmitButton>}
-        </div>
+        {step === 4 && createdId && <QuoteResults requestId={createdId} />}
+
+        {step < 4 && (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button className="btn-ghost mr-auto" disabled={step === 0} onClick={() => setStep((s) => s - 1)}><ChevronLeft className="h-4 w-4" />Voltar</button>
+            {step < 3
+              ? <SubmitButton problems={stepProblems[step]} onClick={goNext} onMouseDown={() => step === 1 && missing.length && setHighlight(missing)}>Avançar<ChevronRight className="h-4 w-4" /></SubmitButton>
+              : <SubmitButton busy={busy} problems={stepProblems[3]} onClick={submit}>{busy ? <Spinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}Enviar cotação</SubmitButton>}
+          </div>
+        )}
       </div>
     </>
+  );
+}
+
+// ================= Etapa 5 — Resultados ao vivo =================
+// Fontes automáticas são consultadas no servidor (tarefas com tempo máximo e novas tentativas limitadas): a tela chama a
+// execução e, em paralelo, relê a rodada a cada 1,5 s para mostrar cada seguradora assim que ela responde.
+const LIVE = {
+  consultando: { label: 'Consultando…', cls: 'bg-sky-500/10 text-sky-700 dark:text-sky-300', icon: Spinner },
+  nova_tentativa: { label: 'Erro — nova tentativa em instantes', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300', icon: Spinner },
+  recebida: { label: 'Cotação recebida', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300', icon: CheckCircle2 },
+  indicativo: { label: 'Valor indicativo', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300', icon: CircleDashed },
+  recusa: { label: 'Recusa', cls: 'bg-red-500/10 text-red-700 dark:text-red-300', icon: XCircle },
+  erro: { label: 'Erro', cls: 'bg-red-500/10 text-red-700 dark:text-red-300', icon: AlertTriangle },
+  tempo: { label: 'Tempo esgotado', cls: 'bg-orange-500/15 text-orange-700 dark:text-orange-300', icon: Hourglass },
+  assistida: { label: 'Aguardando a equipe registrar', cls: 'bg-zinc-500/10 text-zinc-700 dark:text-zinc-300', icon: Hand },
+  analise: { label: 'Análise de subscrição', cls: 'bg-violet-500/15 text-violet-700 dark:text-violet-300', icon: Clock },
+  outro: { label: '', cls: 'bg-zinc-500/10 text-zinc-700 dark:text-zinc-300', icon: Info },
+};
+const retrying = (t) => t.mode === 'automatica' && t.status === 'fonte_indisponivel' && t.attempts < 3;
+function liveOf(t) {
+  if (t.mode === 'automatica' && RUNNING.includes(t.status)) return 'consultando';
+  if (retrying(t)) return 'nova_tentativa';
+  return {
+    cotacao_valida: 'recebida', valor_indicativo: 'indicativo', recusa_informada: 'recusa', tempo_excedido: 'tempo', pendente_assistida: 'assistida', analise_subscricao: 'analise',
+    fonte_indisponivel: 'erro', indeterminado: 'erro', autorizacao_expirada: 'erro', dados_insuficientes: 'erro', incompativel: 'erro', aguardando: 'assistida',
+  }[t.status] || 'outro';
+}
+
+function QuoteResults({ requestId }) {
+  const { company, can, branchLabel } = useAuth();
+  const nav = useNavigate();
+  const manage = can('quotes_manage');
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [compOpen, setCompOpen] = useState(false);
+  const [offerTask, setOfferTask] = useState(null);
+  const [callsTask, setCallsTask] = useState(null);
+  const inFlight = useRef(false);
+  const load = useCallback(() => api.get(`/v1/quote-requests/${requestId}`).then((d) => { setData(d); setError(null); }).catch((e) => setError(e.message)), [requestId]);
+  useEffect(() => { load(); }, [load]);
+  const round = data?.round;
+  const pendingAuto = !!round && round.status !== 'cancelada' && round.tasks.some((t) => t.mode === 'automatica' && (RUNNING.includes(t.status) || retrying(t)));
+
+  // executa as fontes automáticas (retomável) enquanto houver consulta em curso ou nova tentativa prevista
+  useEffect(() => {
+    if (!pendingAuto || !manage || !round) return undefined;
+    let alive = true;
+    const tick = async () => {
+      if (inFlight.current) return;
+      inFlight.current = true;
+      try {
+        const view = await api.post(`/v1/quote-requests/${requestId}/rounds/${round.id}/run`);
+        if (alive) setData((d) => (d && d.round?.id === view.id ? { ...d, round: { ...d.round, ...view } } : d));
+      } catch { /* a próxima volta tenta de novo */ } finally { inFlight.current = false; }
+    };
+    tick();
+    const h = setInterval(tick, 3000);
+    return () => { alive = false; clearInterval(h); };
+  }, [pendingAuto, manage, round?.id, requestId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // enquanto a execução corre no servidor, relê a rodada para mostrar cada resposta assim que chega
+  // consultas assistidas registradas por outra pessoa da equipe também aparecem (leitura mais espaçada)
+  const pendingAssisted = !!round && round.status !== 'cancelada' && round.tasks.some((t) => t.status === 'pendente_assistida');
+  useEffect(() => {
+    if (!pendingAuto && !pendingAssisted) return undefined;
+    const h = setInterval(() => { if (document.visibilityState !== 'hidden') load(); }, pendingAuto ? 1500 : 15000);
+    return () => clearInterval(h);
+  }, [pendingAuto, pendingAssisted, load]);
+
+  if (error && !data) return <Notice tone="danger">{error}</Notice>;
+  if (!round) return <Loading />;
+  const tasks = round.tasks;
+  const done = tasks.filter((t) => !['consultando', 'nova_tentativa', 'assistida'].includes(liveOf(t))).length;
+  const offers = (round.offers || []).filter((o) => o.status === 'ativa');
+  const best = round.badges?.best_fit || round.badges?.lowest_cost || null;
+  const multiScenario = new Set(tasks.map((t) => t.scenario)).size > 1;
+  const chooseBest = () => { if (best) { setSelected([best]); setCompOpen(true); } };
+
+  return (
+    <div className="space-y-4">
+      <Section title="Resultados por seguradora" subtitle={`${data.number_label} · ${data.client_name} · ${branchLabel(data.branch)}`}
+        actions={<Link to={`/cotacoes/${requestId}`} className="btn-ghost"><ExternalLink className="h-4 w-4" />Abrir cotação completa</Link>}>
+        <div className="mb-4">
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span><b>{done}</b> de {tasks.length} consulta(s) concluída(s){pendingAuto ? ' · atualizando automaticamente' : ''}</span>
+            <span className="text-xs text-ink-faint">{offers.length} oferta(s) recebida(s)</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={tasks.length} aria-valuenow={done}>
+            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${tasks.length ? Math.round((done / tasks.length) * 100) : 0}%` }} />
+          </div>
+        </div>
+        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-live="polite">
+          {tasks.map((t) => {
+            const st = liveOf(t);
+            const L = LIVE[st];
+            const Icon = L.icon;
+            const mine = offers.filter((o) => o.task_id === t.id).sort((a, b) => a.total_premium_cents - b.total_premium_cents);
+            const top = mine[0];
+            return (
+              <li key={t.id} className={cx('rounded-app-sm border p-3', top && top.id === best ? 'border-emerald-500/60 bg-emerald-500/5' : 'border-line bg-surface')}>
+                <p className="break-words font-medium leading-snug">{t.institution_name}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className={cx('chip inline-flex items-center gap-1', L.cls)}>
+                    {Icon === Spinner ? <Spinner className="h-3 w-3" /> : <Icon className="h-3.5 w-3.5" />}{L.label || TASK_STATUS[t.status]?.label || t.status}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-xs text-ink-faint">{t.mode === 'automatica' ? <Zap className="h-3 w-3" /> : <Hand className="h-3 w-3" />}{MODE[t.mode]}
+                    {multiScenario && ` · ${SCENARIOS[t.scenario]?.label || t.scenario}`}</span>
+                </div>
+                {top ? (
+                  <div className="mt-2">
+                    <p className="text-lg font-semibold tabular-nums">{money(top.total_premium_cents)}</p>
+                    <p className="text-xs text-ink-soft">{top.product_name}{mine.length > 1 ? ` · +${mine.length - 1} opção(ões)` : ''}{top.valid_until ? ` · válida até ${fmt(top.valid_until)}` : ''}</p>
+                    {top.id === best && <p className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-300"><Trophy className="h-3.5 w-3.5" />Melhor opção pela regra da corretora</p>}
+                  </div>
+                ) : (t.reason || t.protocol) && !['consultando'].includes(st) ? (
+                  <p className="mt-2 text-xs text-ink-soft">{t.reason}{t.protocol ? <span className="block text-ink-faint">Protocolo: {t.protocol}</span> : null}</p>
+                ) : st === 'assistida' ? (
+                  <p className="mt-2 text-xs text-ink-soft">Sem API: a equipe consulta pelo canal oficial e registra a resposta.</p>
+                ) : null}
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {manage && st === 'assistida' && <button type="button" className="btn-primary h-8 px-2.5 text-xs" onClick={() => setOfferTask(t)}><FileUp className="h-3.5 w-3.5" />Registrar resposta</button>}
+                  {manage && t.mode === 'automatica' && !['consultando'].includes(st) && t.attempts > 0 && (
+                    <button type="button" className="btn-ghost h-8 px-2 text-xs" onClick={() => setCallsTask(t)}><FileJson className="h-3.5 w-3.5" />Dados enviados e resposta</button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="mt-3 text-xs text-ink-faint">Erro, tempo esgotado ou falta de resposta <b>não são recusa</b> da seguradora. Fontes sem API continuam como tarefas da equipe e aparecem aqui quando a resposta é registrada.</p>
+      </Section>
+
+      <Section title="Comparação das ofertas" subtitle="Atualiza conforme as respostas chegam. Destaques: menor custo, melhor aderência e maior proteção."
+        actions={manage && offers.length > 0 && <div className="flex flex-wrap gap-2">
+          {best && <button type="button" className="btn-outline" onClick={chooseBest}><Trophy className="h-4 w-4" />Escolher a melhor opção</button>}
+          <SubmitButton problems={!selected.length ? ['Marque na comparação as ofertas que vão ao cliente.'] : []} onClick={() => setCompOpen(true)}><Send className="h-4 w-4" />Gerar link do comparativo ({selected.length})</SubmitButton>
+        </div>}>
+        {!offers.length ? (
+          <Empty icon={pendingAuto ? Clock : Info} title={pendingAuto ? 'Aguardando as seguradoras…' : 'Nenhuma oferta ainda'}
+            text={pendingAuto ? 'As ofertas aparecem aqui assim que cada seguradora responde.' : 'Registre as respostas das consultas assistidas para comparar.'} />
+        ) : (
+          <CompareGrid offers={offers} minCoverages={round.min_coverages || []} badges={round.badges} internal soonDays={company?.settings?.quotes?.expiringDays ?? 3}
+            showCommission={can('commissions_view')} selectable={manage} selected={selected}
+            onToggle={(oid) => setSelected((l) => (l.includes(oid) ? l.filter((x) => x !== oid) : [...l, oid]))} />
+        )}
+      </Section>
+
+      {offerTask && <RegisterOfferModal task={offerTask} request={data} round={round} onClose={() => setOfferTask(null)} onDone={() => { setOfferTask(null); load(); }} />}
+      {callsTask && <ApiCallsModal task={callsTask} onClose={() => setCallsTask(null)} />}
+      {compOpen && <NewComparisonModal round={round} offerIds={selected} client={{ id: data.client_id, name: data.client_name }} branchName={branchLabel(data.branch)}
+        onClose={() => setCompOpen(false)} onDone={(c) => nav(`/comparativos/${c.id}`)} />}
+    </div>
+  );
+}
+
+/** Trilha de uma consulta por API: quais dados foram enviados, resultado e a resposta original (somente equipe). */
+function ApiCallsModal({ task, onClose }) {
+  const { data, loading } = useFetch(() => api.get(`/v1/quote-requests/tasks/${task.id}/api-calls`), [task.id]);
+  return (
+    <Modal open onClose={onClose} size="lg" title={`Consulta por API — ${task.institution_name}`} subtitle="Dados enviados (somente os campos), resultado e resposta original. Não vai ao cliente.">
+      {loading && !data ? <Loading /> : !data?.length ? <Empty title="Sem chamadas registradas" /> : (
+        <ol className="space-y-4">
+          {data.map((c) => (
+            <li key={c.id} className="rounded-app-sm border border-line p-3 text-sm">
+              <p className="font-medium">Tentativa {c.attempt} · {fmtDateTime(c.created_at)} · {c.host}</p>
+              <p className="text-xs text-ink-soft">Resultado: {TASK_STATUS[c.outcome]?.label || c.outcome}{c.http_status ? ` · HTTP ${c.http_status}` : ''}{c.duration_ms != null ? ` · ${c.duration_ms} ms` : ''}</p>
+              {c.error && <p className="mt-1 text-xs text-red-600">{c.error}</p>}
+              <p className="mt-2 text-xs"><b>Base de compartilhamento:</b> {c.sharing_basis || '—'}</p>
+              <p className="mt-1 text-xs"><b>Dados enviados:</b> {c.fields_sent?.length ? c.fields_sent.join(', ') : '—'}</p>
+              {c.response_raw && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-xs font-medium text-primary">Resposta original ({c.response_bytes ?? '?'} bytes)</summary>
+                  <pre className="mt-2 max-h-72 overflow-auto rounded bg-zinc-950 p-2 text-[11px] text-zinc-100">{JSON.stringify(c.response_raw, null, 2)}</pre>
+                </details>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+    </Modal>
   );
 }
 
