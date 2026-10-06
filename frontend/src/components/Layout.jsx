@@ -225,10 +225,15 @@ function Dropdown({ item, light }) {
 
 function MobileDrawer({ nav, onClose }) {
   const { company } = useAuth();
+  useEffect(() => {
+    const k = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [onClose]);
   return (
     <div className="fixed inset-0 z-40 bg-black/40 animate-fade" onClick={onClose}>
-      <aside className="flex h-full w-72 flex-col bg-surface animate-pop" onClick={(e) => e.stopPropagation()}>
-        <div className="flex h-16 items-center justify-between px-4"><Logo company={company} /><button className="btn-ghost btn-icon" onClick={onClose}><X className="h-4 w-4" /></button></div>
+      <aside role="dialog" aria-modal="true" aria-label="Menu" className="flex h-full w-72 flex-col bg-surface animate-pop" onClick={(e) => e.stopPropagation()}>
+        <div className="flex h-16 items-center justify-between px-4"><Logo company={company} /><button className="btn-ghost btn-icon" onClick={onClose} aria-label="Fechar menu"><X className="h-4 w-4" /></button></div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2">
           {nav.flatMap((n) => (n.children ? [{ section: n.label }, ...n.children] : [n])).map((n, i) => (n.section
             ? <div key={i} className="px-3 pb-1 pt-4 text-[11px] font-medium uppercase tracking-wider text-ink-faint">{n.section}</div>
@@ -273,23 +278,33 @@ function TopLayout() {
       {open && <MobileDrawer nav={nav} onClose={() => setOpen(false)} />}
       <DemoBanner />
         <BillingNotices />
-      <main key={loc.pathname} className="flex-1 overflow-y-auto">
+      <main key={loc.pathname} className="has-bottom-nav flex-1 overflow-y-auto">
         <div className={cx('mx-auto w-full p-4 animate-fade sm:p-6', wide ? 'max-w-none lg:px-6' : 'max-w-[1400px] lg:p-8')}>
           <div className="mb-3"><Breadcrumbs nav={nav} /></div>
           <Outlet />
         </div>
       </main>
+      <BottomNav nav={nav} onMore={() => setOpen(true)} />
     </div>
   );
 }
 
 const readCollapsed = () => { try { return localStorage.getItem('apolven:sidebar') === '1'; } catch { return false; } };
 
+// Grupos do menu: os do dia a dia começam abertos; a escolha de abrir/fechar fica lembrada neste aparelho.
+const DAILY_GROUPS = ['Relacionamento', 'Vendas', 'Carteira', 'Financeiro'];
+const NAV_KEY = 'apolven:navgroups';
+const readGroups = () => { try { return JSON.parse(localStorage.getItem(NAV_KEY) || '{}') || {}; } catch { return {}; } };
+const saveGroup = (label, open) => { try { localStorage.setItem(NAV_KEY, JSON.stringify({ ...readGroups(), [label]: open })); } catch { /* sem armazenamento */ } };
+
 /** Grupo do menu lateral: expande/recolhe; recolhido mostra só ícones com dica. */
 function SideGroup({ item, collapsed }) {
   const loc = useLocation();
   const active = item.children.some((c) => (c.end ? loc.pathname === c.to : loc.pathname.startsWith(c.to)));
-  const [open, setOpen] = useState(active);
+  const [open, setOpen] = useState(() => {
+    const saved = readGroups()[item.label];
+    return active || (saved ?? DAILY_GROUPS.includes(item.label));
+  });
   useEffect(() => { if (active) setOpen(true); }, [active]);
   if (collapsed) {
     return (
@@ -300,13 +315,42 @@ function SideGroup({ item, collapsed }) {
   }
   return (
     <div>
-      <button onClick={() => setOpen((o) => !o)} aria-expanded={open}
+      <button onClick={() => setOpen((o) => { saveGroup(item.label, !o); return !o; })} aria-expanded={open}
         className={cx('flex w-full items-center gap-2 rounded-app-sm px-3 pb-1 pt-3 text-xs font-semibold', active ? 'text-primary' : 'text-ink-faint hover:text-ink-soft')}>
         <span className="flex-1 truncate text-left">{item.label}</span>
         <ChevronDown className={cx('h-3.5 w-3.5 transition', !open && '-rotate-90')} />
       </button>
       {open && <div className="space-y-0.5">{item.children.map((c) => <SideLink key={c.to} item={c} />)}</div>}
     </div>
+  );
+}
+
+/** Barra inferior no celular: atalhos do dia a dia + "Mais" (menu completo). */
+const BOTTOM_PRIORITY = [
+  { to: '/agenda', short: 'Agenda' }, { to: '/cotacoes', short: 'Cotações' }, { to: '/renovacoes', short: 'Renovações' },
+  { to: '/parcelas', short: 'Parcelas' }, { to: '/comissoes', short: 'Comissões' }, { to: '/clientes', short: 'Clientes' },
+];
+function BottomNav({ nav, onMore }) {
+  const all = nav.flatMap((n) => n.children || [n]);
+  const home = all.find((x) => x.to === '/');
+  const picks = BOTTOM_PRIORITY.map((p) => { const it = all.find((x) => x.to === p.to); return it && { ...it, short: p.short }; }).filter(Boolean).slice(0, 3);
+  const items = [home && { ...home, short: 'Início' }, ...picks].filter(Boolean);
+  return (
+    <nav aria-label="Atalhos" className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur lg:hidden"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="mx-auto flex max-w-lg items-stretch justify-around">
+        {items.map((i) => (
+          <NavLink key={i.to} to={i.to} end={i.end}
+            className={({ isActive }) => cx('flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 px-1 text-[11px] font-medium',
+              isActive ? 'text-primary' : 'text-ink-faint')}>
+            <i.icon className="h-5 w-5" aria-hidden />{i.short}
+          </NavLink>
+        ))}
+        <button type="button" onClick={onMore} className="flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 px-1 text-[11px] font-medium text-ink-faint">
+          <Menu className="h-5 w-5" aria-hidden />Mais
+        </button>
+      </div>
+    </nav>
   );
 }
 
@@ -365,12 +409,13 @@ function SideLayout() {
         </header>
         <DemoBanner />
         <BillingNotices />
-        <main key={loc.pathname} className="flex-1 overflow-y-auto">
+        <main key={loc.pathname} className="has-bottom-nav flex-1 overflow-y-auto">
           <div className={cx('mx-auto w-full p-4 animate-fade sm:p-6', wide ? 'max-w-none lg:px-6' : 'max-w-[1400px] lg:p-8')}>
             <div className="mb-3 lg:hidden"><Breadcrumbs nav={nav} /></div>
             <Outlet />
           </div>
         </main>
+        <BottomNav nav={nav} onMore={() => setOpen(true)} />
       </div>
     </div>
   );

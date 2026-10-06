@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Loader2, Inbox } from 'lucide-react';
 import { useUI } from '../context/UIContext';
@@ -68,31 +68,190 @@ export function Toggle({ checked, onChange, label, hint }) {
   );
 }
 
-export function Modal({ open, onClose, title, subtitle, children, footer, size = 'md' }) {
+// Pilha de modais abertos: só o do topo responde a Esc/Tab.
+const modalStack = [];
+let modalSeq = 0;
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Modal acessível (role="dialog", foco preso, Esc).
+ * - Formulário alterado: Esc, clique fora ou X pedem confirmação antes de descartar.
+ * - Tamanhos lg/xl (formulários longos) não fecham com clique fora.
+ * - guard={false} desliga a confirmação (modais só de leitura/filtros).
+ */
+export function Modal({ open, onClose, title, subtitle, children, footer, size = 'md', guard = true }) {
+  const [id] = useState(() => `modal-${++modalSeq}`);
+  const boxRef = useRef(null);
+  const dirtyRef = useRef(false);
+  const [asking, setAsking] = useState(false);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  const requestClose = useCallback(() => {
+    if (guard && dirtyRef.current) { setAsking(true); return; }
+    closeRef.current?.();
+  }, [guard]);
+
   useEffect(() => {
-    if (!open) return;
-    const h = (e) => e.key === 'Escape' && onClose?.();
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [open, onClose]);
+    if (!open) return undefined;
+    dirtyRef.current = false;
+    setAsking(false);
+    modalStack.push(id);
+    const prev = document.activeElement;
+    const box = boxRef.current;
+    // foco inicial: primeiro campo do corpo; senão o próprio diálogo
+    const t = setTimeout(() => {
+      const first = box?.querySelector(`[data-modal-body] :is(${FOCUSABLE})`);
+      (first || box)?.focus({ preventScroll: true });
+    }, 30);
+    const markDirty = (e) => { if (!e.target?.closest?.('[data-no-dirty]') && !e.target?.readOnly) dirtyRef.current = true; };
+    box?.addEventListener('input', markDirty, true);
+    box?.addEventListener('change', markDirty, true);
+    const onKey = (e) => {
+      if (modalStack[modalStack.length - 1] !== id) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); requestClose(); return; }
+      if (e.key === 'Tab' && box) {
+        const els = [...box.querySelectorAll(FOCUSABLE)].filter((el) => el.offsetParent !== null || el === document.activeElement);
+        if (!els.length) { e.preventDefault(); box.focus(); return; }
+        const firstEl = els[0];
+        const lastEl = els[els.length - 1];
+        if (e.shiftKey && (document.activeElement === firstEl || !box.contains(document.activeElement))) { e.preventDefault(); lastEl.focus(); }
+        else if (!e.shiftKey && (document.activeElement === lastEl || !box.contains(document.activeElement))) { e.preventDefault(); firstEl.focus(); }
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('keydown', onKey, true);
+      box?.removeEventListener('input', markDirty, true);
+      box?.removeEventListener('change', markDirty, true);
+      const i = modalStack.lastIndexOf(id);
+      if (i >= 0) modalStack.splice(i, 1);
+      if (prev && typeof prev.focus === 'function' && document.contains(prev)) prev.focus({ preventScroll: true });
+    };
+  }, [open, id, requestClose]);
+
   if (!open) return null;
   const w = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl', xl: 'max-w-5xl' }[size];
+  const backdropCloses = size === 'sm' || size === 'md';
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4 animate-fade" onMouseDown={onClose}>
-      <div className={cx('card animate-pop flex max-h-[94vh] w-full flex-col rounded-b-none sm:rounded-b-app', w)}
-        onMouseDown={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4 animate-fade"
+      onMouseDown={(e) => { if (e.target === e.currentTarget && backdropCloses) requestClose(); }}>
+      <div ref={boxRef} role="dialog" aria-modal="true" aria-labelledby={`${id}-t`} aria-describedby={subtitle ? `${id}-s` : undefined} tabIndex={-1}
+        className={cx('card animate-pop relative flex max-h-[94vh] w-full flex-col rounded-b-none outline-none sm:rounded-b-app', w)}>
         <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
-          <div>
-            <h2 className="text-base font-semibold">{title}</h2>
-            {subtitle && <p className="text-xs text-ink-faint mt-0.5">{subtitle}</p>}
+          <div className="min-w-0">
+            <h2 id={`${id}-t`} className="text-base font-semibold">{title}</h2>
+            {subtitle && <p id={`${id}-s`} className="text-xs text-ink-faint mt-0.5">{subtitle}</p>}
           </div>
-          <button onClick={onClose} className="btn-ghost btn-icon -mr-2 -mt-1" aria-label="Fechar"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={requestClose} className="btn-ghost btn-icon -mr-2 -mt-1" aria-label="Fechar"><X className="h-4 w-4" /></button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div data-modal-body className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {footer && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-5 py-3">{footer}</div>}
+        {asking && (
+          <div className="absolute inset-0 z-10 grid place-items-center rounded-[inherit] bg-black/30 p-4">
+            <div role="alertdialog" aria-modal="true" aria-labelledby={`${id}-d`} className="card w-full max-w-sm p-5 shadow-lg">
+              <h3 id={`${id}-d`} className="text-base font-semibold">Descartar o que foi preenchido?</h3>
+              <p className="mt-1.5 text-sm text-ink-soft">As informações digitadas neste formulário ainda não foram salvas.</p>
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <button type="button" autoFocus className="btn-primary" onClick={() => setAsking(false)}>Continuar preenchendo</button>
+                <button type="button" className="btn-ghost text-red-600" onClick={() => { setAsking(false); dirtyRef.current = false; closeRef.current?.(); }}>Descartar</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>,
     document.body,
+  );
+}
+
+/** Normaliza pendências: string ou { text, field } (field = rótulo do campo ou seletor CSS). */
+const asProblem = (p) => (typeof p === 'string' ? { text: p } : p);
+
+/** Leva o usuário ao campo da pendência: procura pelo rótulo (texto) ou seletor, rola e foca. */
+export function focusField(field, scope) {
+  if (!field || typeof document === 'undefined') return false;
+  const root = scope || document;
+  let el = null;
+  if (/^[#.[]/.test(field)) el = root.querySelector(field);
+  if (!el) {
+    const want = field.toLowerCase();
+    const labels = [...root.querySelectorAll('.label, label, legend, h3')];
+    const lab = labels.find((l) => l.textContent.trim().toLowerCase().replace(/\s*\*$/, '').startsWith(want));
+    if (lab) el = lab.closest('label')?.querySelector('input,select,textarea,button') || lab.parentElement?.querySelector('input,select,textarea,button') || lab;
+  }
+  if (!el) return false;
+  el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  setTimeout(() => el.focus?.({ preventScroll: true }), 250);
+  return true;
+}
+
+/**
+ * Botão de envio que nunca fica "mudo": com pendências, ao clicar lista tudo o que falta
+ * e leva ao primeiro campo. problems: [string | { text, field }].
+ */
+export function SubmitButton({ problems = [], onClick, busy, className = 'btn-primary', children, disabled, ...p }) {
+  const [shown, setShown] = useState(false);
+  const [probId] = useState(() => `prob-${++modalSeq}`);
+  const ref = useRef(null);
+  const list = problems.filter(Boolean).map(asProblem);
+  useEffect(() => { if (!list.length) setShown(false); }, [list.length]);
+  const click = (e) => {
+    if (busy) return;
+    if (list.length) {
+      setShown(true);
+      const scope = ref.current?.closest('[role="dialog"]') || ref.current?.closest('form') || document;
+      const firstWithField = list.find((x) => x.field);
+      if (firstWithField) focusField(firstWithField.field, scope);
+      return;
+    }
+    onClick?.(e);
+  };
+  return (
+    <>
+      {shown && list.length > 0 && (
+        <div id={probId} role="alert" className="order-first mr-auto w-full rounded-app-sm border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100 sm:w-auto sm:max-w-[60%]">
+          <b className="block">Falta {list.length === 1 ? '1 item' : `${list.length} itens`} para continuar:</b>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            {list.map((x, i) => (
+              <li key={i}>{x.field
+                ? <button type="button" className="inline text-left underline decoration-dotted underline-offset-2 hover:decoration-solid"
+                    onClick={() => focusField(x.field, ref.current?.closest('[role="dialog"]') || document)}>{x.text}</button>
+                : x.text}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <button ref={ref} type="button" className={className} aria-describedby={shown && list.length ? probId : undefined}
+        disabled={disabled || busy} onClick={click} {...p}>{children}</button>
+    </>
+  );
+}
+
+/** Dica em linguagem simples: botão "?" que abre uma explicação curta (toque ou clique). */
+export function Hint({ label, children, className }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const h = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
+    const k = (e) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', h);
+    document.addEventListener('touchstart', h);
+    document.addEventListener('keydown', k);
+    return () => { document.removeEventListener('mousedown', h); document.removeEventListener('touchstart', h); document.removeEventListener('keydown', k); };
+  }, [open]);
+  return (
+    <span ref={ref} className={cx('relative inline-flex align-middle', className)}>
+      <button type="button" aria-label={`O que é ${label}?`} aria-expanded={open} onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        className="hint-btn ml-1 inline-grid h-[18px] w-[18px] place-items-center rounded-full border border-current text-[10px] font-bold leading-none text-ink-faint hover:text-primary">?</button>
+      {open && (
+        <span role="note" className="absolute left-1/2 top-full z-40 mt-1.5 w-64 max-w-[80vw] -translate-x-1/2 rounded-app-sm border border-line bg-surface p-2.5 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-ink shadow-lg">
+          <b className="mb-0.5 block">{label}</b>{children}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -125,10 +284,10 @@ export function PageHeader({ title, subtitle, actions }) {
 
 export function Tabs({ tabs, value, onChange }) {
   return (
-    <div className="mb-5 flex gap-1 overflow-x-auto rounded-app-sm bg-muted p-1 w-fit max-w-full">
+    <div role="tablist" className="mb-5 flex gap-1 overflow-x-auto rounded-app-sm bg-muted p-1 w-fit max-w-full">
       {tabs.map((t) => (
-        <button key={t.value} onClick={() => onChange(t.value)}
-          className={cx('whitespace-nowrap rounded-[calc(var(--radius)*0.45)] px-3 py-1.5 text-sm font-medium transition',
+        <button key={t.value} role="tab" aria-selected={value === t.value} onClick={() => onChange(t.value)}
+          className={cx('tab-btn whitespace-nowrap rounded-[calc(var(--radius)*0.45)] px-3 py-1.5 text-sm font-medium transition',
             value === t.value ? 'bg-surface text-ink shadow-soft' : 'text-ink-soft hover:text-ink')}>
           {t.label}
         </button>
@@ -269,12 +428,12 @@ export function PromptModal({ open, title, subtitle, fields = [{ key: 'reason', 
   const [v, setV] = useState({});
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (open) setV({}); }, [open]);
-  const okToSend = fields.every((f) => !f.required || String(v[f.key] || '').trim().length >= (f.min || 3));
   return (
     <Modal open={open} onClose={onClose} title={title} subtitle={subtitle}
       footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button>
-        <button className={danger ? 'btn-danger' : 'btn-primary'} disabled={!okToSend || busy}
-          onClick={async () => { setBusy(true); try { await onSubmit(v); } finally { setBusy(false); } }}>{confirmText}</button></>}>
+        <SubmitButton className={danger ? 'btn-danger' : 'btn-primary'} busy={busy}
+          problems={fields.filter((f) => f.required && String(v[f.key] || '').trim().length < (f.min || 3)).map((f) => ({ text: `Preencha “${f.label}” (mín. ${f.min || 3} caracteres).`, field: f.label }))}
+          onClick={async () => { setBusy(true); try { await onSubmit(v); } finally { setBusy(false); } }}>{confirmText}</SubmitButton></>}>
       <div className="space-y-3">
         {fields.map((f) => (f.textarea
           ? <Textarea key={f.key} label={f.label} rows={3} value={v[f.key] || ''} placeholder={f.placeholder} onChange={(e) => setV({ ...v, [f.key]: e.target.value })} />

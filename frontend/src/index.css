@@ -11,7 +11,8 @@
   --line: 229 229 226;
   --ink: 24 24 27;
   --ink-soft: 82 82 91;
-  --ink-faint: 140 140 150;
+  /* texto secundário com contraste ≥ 4,5:1 sobre fundo, superfície e área neutra */
+  --ink-faint: 104 104 114;
   --radius: 14px;
   --font: 'Inter';
   --row: 2.5rem;
@@ -24,7 +25,7 @@
   --line: 48 48 54;
   --ink: 244 244 245;
   --ink-soft: 190 190 198;
-  --ink-faint: 130 130 140;
+  --ink-faint: 158 158 168;
   color-scheme: dark;
 }
 .density-compact { --row: 2.1rem; }
@@ -56,10 +57,25 @@ body {
   .label { @apply mb-1.5 block text-xs font-medium text-ink-soft; }
   .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium; }
   .table-clean { @apply w-full text-sm; }
-  .table-clean th { @apply px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-ink-faint border-b border-line; }
+  .table-clean th { @apply px-4 py-2.5 text-left text-xs font-medium text-ink-faint border-b border-line; }
   .table-clean td { @apply px-4 py-3 border-b border-line/70; }
   .table-clean tbody tr { @apply hover:bg-muted/60 transition; }
 }
+
+/* Alvos de toque ≥ 44px em telas de toque (botões, campos, abas, links de ação). */
+@media (pointer: coarse) {
+  :root { --row: 2.75rem; }
+  .btn, .input, select.input { min-height: 44px; }
+  .btn-icon { min-width: 44px; }
+  .chip-btn, [role="tab"], .tab-btn { min-height: 44px; }
+  .hint-btn { position: relative; }
+  .hint-btn::after { content: ''; position: absolute; inset: -13px; }
+  input[type="checkbox"], input[type="radio"] { min-width: 20px; min-height: 20px; }
+}
+
+/* Espaço para a barra de navegação inferior (celular). */
+.has-bottom-nav { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
+@media (min-width: 1024px) { .has-bottom-nav { padding-bottom: 0; } }
 
 /* scrollbar discreta */
 * { scrollbar-width: thin; scrollbar-color: rgb(var(--line)) transparent; }
@@ -114,3 +130,9 @@ body {
 }
 @media (min-width: 640px) { .action-bar { margin: 1.5rem -1.5rem -1.5rem; } }
 @media (min-width: 1024px) { .action-bar { margin: 1.5rem -2rem -2rem; } }
+
+/* Painel no celular: indicadores zerados ficam ocultos (botão "Mostrar também…" revela). */
+@media (max-width: 639px) {
+  .dash-cards:not(.dash-showall) .dash-zero { display: none; }
+  .dash-cards:not(.dash-showall) .dash-group:not(:has(.dash-nz)) { display: none; }
+}
