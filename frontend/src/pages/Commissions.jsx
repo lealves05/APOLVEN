@@ -4,15 +4,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Plus, CheckCircle2, Scale, MessageSquareWarning, Info, Undo2, Upload, FileSpreadsheet, Link2, Landmark, Clock, AlertTriangle, TrendingUp, Wallet, RotateCcw, FileText,
+  MoreHorizontal, ChevronDown, Download, CheckSquare,
 } from 'lucide-react';
 import { api, idemKey, fileToText, qs } from '../lib/api';
 import { money, fmt, fmtDateTime, ymd, pct, docNumber, COMMISSION_STATUS, LINE_STATUS, ACCRUAL_KIND, ACCRUAL_STATUS, BRANCHES } from '../lib/format';
 import { useAuth } from '../context/AuthContext';
 import {
   PageHeader, Section, KV, Tabs, Stat, Modal, PromptModal, Input, Textarea, Select, Toggle, CentsInput, FileButton, StatusChip, Notice, Empty, Loading, Spinner,
-  useFetch, useAction, FAIL, cx,
+  useFetch, useAction, FAIL, cx, SubmitButton, Hint,
 } from '../components/ui';
 import { useTable, SortTh, Pager } from '../components/Table';
+import { STATEMENT_FIELDS, csvRows, xlsxRows, isSheet, splitHeader, guessMapping, isNativeCsv, toCanonicalCsv, TEMPLATE_CSV } from '../lib/statement';
 
 const TABS = [
   { value: 'a_receber', label: 'A receber' },
@@ -84,29 +86,51 @@ function Receivables() {
   const tot = data?.totals;
   const def = data?.definitions || {};
 
+  const [allTotals, setAllTotals] = useState(false);
+  const [sel, setSel] = useState([]);
+  const [bulk, setBulk] = useState(false);
+  const selectable = items.filter((r) => r.confirmed_cents == null);
+  const toggleSel = (id) => setSel((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id]));
+  useEffect(() => { setSel((l) => l.filter((id) => items.some((r) => r.id === id))); }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="space-y-5">
       {tot && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Previsão — não confirmada" value={money(tot.projected_cents)} hint={def.projected || 'Projeção: não é valor adquirido.'} icon={TrendingUp} />
-          <Stat label="Confirmado (devido)" value={money(tot.confirmed_cents)} hint={def.confirmed} icon={CheckCircle2} tone="text-sky-600" />
-          <Stat label="Liquidado (bruto)" value={money(tot.settled_cents)} hint={def.settled} icon={Landmark} tone="text-emerald-600" />
-          <Stat label="Saldo confirmado a receber" value={money(tot.open_confirmed_cents)} hint={def.open_confirmed} icon={Wallet} />
-          <Stat label="Vencido (confirmado)" value={money(tot.overdue_cents)} hint="Saldo confirmado com vencimento passado." icon={Clock} tone="text-red-600" />
-          <Stat label="Estornado" value={money(tot.reversed_cents)} hint="Estornos lançados como ajuste vinculado." icon={RotateCcw} />
-          <Stat label="Divergências" value={tot.divergent} hint="Comissões com linha de extrato divergente." icon={AlertTriangle} tone={tot.divergent ? 'text-orange-600' : undefined} />
+        <div className="space-y-2">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Stat label="Saldo confirmado a receber" value={money(tot.open_confirmed_cents)} hint="O que a seguradora já confirmou e ainda não pagou." icon={Wallet} />
+            <Stat label="Vencido (confirmado)" value={money(tot.overdue_cents)} hint={Number(tot.overdue_cents) ? 'Cobrar a seguradora.' : 'Nada vencido.'} icon={Clock} tone={Number(tot.overdue_cents) ? 'text-red-600' : undefined} />
+            <Stat label="Previsão — ainda não confirmada" value={money(tot.projected_cents)} hint="Estimativa pela regra do acordo; pode mudar." icon={TrendingUp} />
+          </div>
+          <button type="button" className="btn-ghost h-8 px-2 text-xs" aria-expanded={allTotals} onClick={() => setAllTotals((v) => !v)}>
+            <ChevronDown className={cx('h-3.5 w-3.5 transition', !allTotals && '-rotate-90')} /> {allTotals ? 'Ocultar' : 'Ver'} todos os totais
+            {Number(tot.divergent) > 0 && <span className="chip bg-orange-500/15 text-orange-700 dark:text-orange-300">{tot.divergent} divergência(s)</span>}
+          </button>
+          {allTotals && (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Stat label="Confirmado (devido)" value={money(tot.confirmed_cents)} hint={def.confirmed} icon={CheckCircle2} tone="text-sky-600" />
+              <Stat label="Liquidado (bruto)" value={money(tot.settled_cents)} hint={def.settled} icon={Landmark} tone="text-emerald-600" />
+              <Stat label="Estornado" value={money(tot.reversed_cents)} hint="Estornos lançados como ajuste vinculado." icon={RotateCcw} />
+              <Stat label="Divergências" value={tot.divergent} hint="Comissões com linha de extrato divergente." icon={AlertTriangle} tone={tot.divergent ? 'text-orange-600' : undefined} />
+            </div>
+          )}
         </div>
       )}
       <div className="flex flex-wrap items-end gap-3">
-        <Select label="Situação" value={status} onChange={(e) => setStatus(e.target.value)} className="w-48">
+        <Select label="Situação" value={status} onChange={(e) => setStatus(e.target.value)} className="w-full sm:w-48">
           <option value="">Todas</option>
           {Object.entries(COMMISSION_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </Select>
-        <Select label="Seguradora" value={inst} onChange={(e) => setInst(e.target.value)} className="w-56">
+        <Select label="Seguradora" value={inst} onChange={(e) => setInst(e.target.value)} className="w-full sm:w-56">
           <option value="">Todas</option>
           {institutions.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
         </Select>
-        <div className="w-56"><Toggle checked={open} onChange={setOpen} label="Somente com saldo em aberto" hint="Inclui previsões ainda não confirmadas" /></div>
+        <div className="w-full sm:w-56"><Toggle checked={open} onChange={setOpen} label="Somente com saldo em aberto" hint="Inclui previsões ainda não confirmadas" /></div>
+        {can('commissions_settle') && selectable.length > 0 && (
+          <button className="btn-outline sm:ml-auto" onClick={() => (sel.length ? setBulk(true) : setSel(selectable.map((r) => r.id)))}>
+            <CheckSquare className="h-4 w-4" /> {sel.length ? `Confirmar selecionadas (${sel.length})` : 'Selecionar não confirmadas'}
+          </button>
+        )}
       </div>
 
       {loading && !data ? <Loading /> : !items.length ? (
@@ -117,13 +141,8 @@ function Receivables() {
             <thead>
               <tr>
                 <SortTh t={t} k="client">Apólice / cliente</SortTh>
-                <SortTh t={t} k="institution_name">Seguradora</SortTh>
-                <th>Parcela</th>
-                <SortTh t={t} k="due_date">Vencimento</SortTh>
+                <SortTh t={t} k="due_date">Parcela e vencimento</SortTh>
                 <th className="text-right">Previsto</th>
-                <th className="text-right">Confirmado</th>
-                <th className="text-right">Liquidado (bruto)</th>
-                <th className="text-right">Ajustes</th>
                 <SortTh t={t} k="balance" className="text-right">Saldo confirmado</SortTh>
                 <SortTh t={t} k="status">Situação</SortTh>
                 <th><span className="sr-only">Ações</span></th>
@@ -131,33 +150,37 @@ function Receivables() {
             </thead>
             <tbody>
               {t.rows.map((r) => {
-                const adj = Number(r.credit_cents) - Number(r.debit_cents);
+                const canSel = r.confirmed_cents == null;
                 return (
                   <tr key={r.id}>
-                    <td>
-                      <Link to={`/apolices/${r.policy_id}`} className="font-medium text-primary hover:underline">{r.policy_number || 'sem número'}</Link>
-                      <div className="text-xs text-ink-faint">{r.client_name}</div>
+                    <td data-label="Apólice">
+                      <div className="flex items-start gap-2.5">
+                        {can('commissions_settle') && (canSel
+                          ? <input type="checkbox" className="mt-1 h-4 w-4 shrink-0" checked={sel.includes(r.id)} onChange={() => toggleSel(r.id)} aria-label={`Selecionar parcela ${r.installment_no} da apólice ${r.policy_number}`} />
+                          : <span className="w-4 shrink-0" />)}
+                        <div className="min-w-0">
+                          <Link to={`/apolices/${r.policy_id}`} className="font-medium text-primary hover:underline">{r.policy_number || 'sem número'}</Link>
+                          <div className="text-xs text-ink-faint">{r.client_name} · {r.institution_name}</div>
+                        </div>
+                      </div>
                     </td>
-                    <td>{r.institution_name}</td>
-                    <td className="tabular-nums">{r.installment_no}/{r.installments_total}</td>
-                    <td className="tabular-nums">{fmt(r.due_date)}</td>
-                    <td className="text-right text-ink-soft"><Num v={r.expected_cents} /></td>
-                    <td className="text-right">{r.confirmed_cents == null ? <span className="text-xs text-ink-faint">não confirmada</span> : <Num v={r.confirmed_cents} />}</td>
-                    <td className="text-right"><Num v={r.allocated_cents} /></td>
-                    <td className="text-right">{adj ? <Num v={adj} /> : <span className="text-ink-faint">—</span>}</td>
-                    <td className="text-right font-medium">{r.balance_cents == null ? <span className="text-xs font-normal text-ink-faint">sem confirmação</span> : <Num v={r.balance_cents} />}</td>
-                    <td>
-                      <div className="flex flex-wrap gap-1">
+                    <td data-label="Parcela" className="tabular-nums">{r.installment_no}/{r.installments_total} · {fmt(r.due_date)}</td>
+                    <td data-label="Previsto" className="text-right text-ink-soft"><Num v={r.expected_cents} /></td>
+                    <td data-label="Saldo confirmado" className="text-right font-medium">{r.balance_cents == null ? <span className="text-xs font-normal text-ink-faint">aguardando confirmação</span> : <Num v={r.balance_cents} />}</td>
+                    <td data-label="Situação">
+                      <div className="flex flex-wrap justify-end gap-1 md:justify-start">
                         <StatusChip map={COMMISSION_STATUS} value={r.status} />
                         {r.adjusted && r.status !== 'ajustada' && <StatusChip map={COMMISSION_STATUS} value="ajustada" />}
                       </div>
                     </td>
-                    <td>
-                      <div className="flex flex-wrap justify-end gap-1">
-                        <button className={smallBtn} onClick={() => setModal({ kind: 'info', row: r })} aria-label="Detalhes"><Info className="h-3.5 w-3.5" /></button>
+                    <td data-label="">
+                      <div className="flex items-center justify-end gap-1">
                         {can('commissions_settle') && <button className={smallBtn} onClick={() => setModal({ kind: 'confirm', row: r })}><CheckCircle2 className="h-3.5 w-3.5" /> Confirmar</button>}
-                        {can('commissions_adjust') && <button className={smallBtn} onClick={() => setModal({ kind: 'adjust', row: r })}><Scale className="h-3.5 w-3.5" /> Ajuste</button>}
-                        {can('commissions_adjust') && <button className={smallBtn} onClick={() => setModal({ kind: 'contest', row: r })}><MessageSquareWarning className="h-3.5 w-3.5" /> Contestar</button>}
+                        <RowMenu items={[
+                          { label: 'Detalhes e valores', icon: Info, onClick: () => setModal({ kind: 'info', row: r }) },
+                          can('commissions_adjust') && { label: 'Ajuste ou estorno', icon: Scale, onClick: () => setModal({ kind: 'adjust', row: r }) },
+                          can('commissions_adjust') && { label: 'Contestar com a seguradora', icon: MessageSquareWarning, onClick: () => setModal({ kind: 'contest', row: r }) },
+                        ]} label={`Mais ações da parcela ${r.installment_no} da apólice ${r.policy_number}`} />
                       </div>
                     </td>
                   </tr>
@@ -173,7 +196,79 @@ function Receivables() {
       <ConfirmModal row={modal?.kind === 'confirm' ? modal.row : null} onClose={close} onDone={done} />
       <AdjustModal row={modal?.kind === 'adjust' ? modal.row : null} onClose={close} onDone={reload} />
       <ContestModal row={modal?.kind === 'contest' ? modal.row : null} onClose={close} onDone={done} />
+      {bulk && <BulkConfirmModal rows={items.filter((r) => sel.includes(r.id))} onClose={() => setBulk(false)} onDone={() => { setBulk(false); setSel([]); reload(); }} />}
     </div>
+  );
+}
+
+/** Menu "mais ações" com rótulos (evita botões só com ícone). */
+function RowMenu({ items, label }) {
+  const [open, setOpen] = useState(false);
+  const list = items.filter(Boolean);
+  useEffect(() => {
+    if (!open) return undefined;
+    const h = () => setOpen(false);
+    const k = (e) => e.key === 'Escape' && setOpen(false);
+    setTimeout(() => document.addEventListener('click', h), 0);
+    document.addEventListener('keydown', k);
+    return () => { document.removeEventListener('click', h); document.removeEventListener('keydown', k); };
+  }, [open]);
+  return (
+    <div className="relative">
+      <button type="button" className="btn-ghost btn-icon h-8" aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}><MoreHorizontal className="h-4 w-4" /></button>
+      {open && (
+        <div role="menu" className="card animate-pop absolute right-0 top-full z-30 mt-1 w-60 p-1 text-left text-sm">
+          {list.map((i) => (
+            <button key={i.label} role="menuitem" type="button" className="flex w-full items-center gap-2 rounded-app-sm px-3 py-2 text-left hover:bg-muted" onClick={() => { setOpen(false); i.onClick(); }}>
+              <i.icon className="h-4 w-4 text-ink-faint" />{i.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Confirma várias comissões de uma vez pelo valor previsto (mesma fonte de confirmação). */
+function BulkConfirmModal({ rows, onClose, onDone }) {
+  const [source, setSource] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const total = rows.reduce((a, r) => a + Number(r.expected_cents || 0), 0);
+  const submit = async () => {
+    setBusy(true);
+    const errors = [];
+    let okCount = 0;
+    for (const r of rows) {
+      try { await api.post(`/v1/commissions/receivables/${r.id}/confirm`, { confirmed_cents: r.expected_cents, source: source.trim() }); okCount += 1; }
+      catch (e) { errors.push(`${r.policy_number} ${r.installment_no}/${r.installments_total}: ${e.message}`); }
+    }
+    setBusy(false);
+    setResult({ okCount, errors });
+  };
+  return (
+    <Modal open onClose={result ? onDone : onClose} title={result ? 'Confirmação concluída' : `Confirmar ${rows.length} comissão(ões)`}
+      subtitle={result ? null : `Total previsto: ${money(total)}`}
+      footer={result ? <button className="btn-primary" onClick={onDone}>Concluir</button> : <>
+        <button className="btn-ghost" onClick={onClose}>Voltar</button>
+        <SubmitButton busy={busy} problems={source.trim().length < 3 ? [{ text: 'Informe a fonte da confirmação (ex.: extrato de 09/2026).', field: 'Fonte da confirmação' }] : []} onClick={submit}>
+          {busy ? <Spinner className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />} Confirmar pelo valor previsto
+        </SubmitButton></>}>
+      {result ? (
+        <div className="space-y-3">
+          <Notice tone={result.errors.length ? 'warn' : 'ok'}>{result.okCount} confirmada(s){result.errors.length ? `; ${result.errors.length} não puderam ser confirmadas.` : '.'}</Notice>
+          {result.errors.length > 0 && <ul className="list-disc space-y-1 pl-5 text-xs text-ink-soft">{result.errors.map((e) => <li key={e}>{e}</li>)}</ul>}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <Notice>Cada parcela será confirmada pelo <b>valor previsto</b> pela regra. Se a seguradora informou valor diferente, use “Confirmar” na linha (ou importe o extrato e concilie).</Notice>
+          <ul className="max-h-48 divide-y divide-line overflow-y-auto rounded-app-sm border border-line text-sm">
+            {rows.map((r) => <li key={r.id} className="flex justify-between gap-3 px-3 py-1.5"><span>{r.policy_number} · {r.installment_no}/{r.installments_total} · {fmt(r.due_date)}</span><Num v={r.expected_cents} /></li>)}
+          </ul>
+          <Input label="Fonte da confirmação" placeholder="Ex.: extrato da seguradora de 09/2026" value={source} onChange={(e) => setSource(e.target.value)} />
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -220,10 +315,10 @@ function ConfirmModal({ row, onClose, onDone }) {
     const r = await run(() => api.post(`/v1/commissions/receivables/${row.id}/confirm`, { confirmed_cents: v.confirmed_cents, source: v.source, ...(v.due_date ? { due_date: v.due_date } : {}) }), 'Valor confirmado.');
     if (r !== FAIL) onDone();
   };
-  const ok = v.confirmed_cents != null && String(v.source || '').trim().length >= 3;
   return (
     <Modal open={!!row} onClose={onClose} title="Confirmar valor da comissão" subtitle={row && `Apólice ${row.policy_number} · parcela ${row.installment_no}/${row.installments_total}`}
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!ok || busy} onClick={submit}>Confirmar valor</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={submit}
+        problems={[v.confirmed_cents == null && { text: 'Informe o valor confirmado.', field: 'Valor confirmado' }, String(v.source || '').trim().length < 3 && { text: 'Informe a fonte da confirmação (mín. 3 caracteres).', field: 'Fonte da confirmação' }]}>Confirmar valor</SubmitButton></>}>
       {row && (
         <div className="space-y-3">
           <Notice>Previsto pela regra: <b>{money(row.expected_cents)}</b>. Confirme o valor informado pela seguradora (extrato, portal, e-mail formal). Já liquidado: {money(row.allocated_cents)} — o confirmado não pode ficar abaixo disso.</Notice>
@@ -257,7 +352,7 @@ function AdjustModal({ row, onClose, onDone }) {
     <Modal open={!!row} onClose={onClose} size={result ? 'lg' : 'md'} title={result ? 'Estorno registrado — efeito nos repasses' : 'Ajuste ou estorno da comissão'}
       subtitle={row && `Apólice ${row.policy_number} · parcela ${row.installment_no}/${row.installments_total}`}
       footer={result ? <button className="btn-primary" onClick={onClose}>Concluir</button>
-        : <><button className="btn-ghost" onClick={onClose}>Voltar</button><button className={v.kind === 'estorno' ? 'btn-danger' : 'btn-primary'} disabled={!ok || busy} onClick={submit}>Registrar {ADJ_KIND[v.kind]?.toLowerCase()}</button></>}>
+        : <><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton className={v.kind === 'estorno' ? 'btn-danger' : 'btn-primary'} busy={busy} onClick={submit} problems={[!(v.amount_cents > 0) && { text: 'Informe o valor.', field: 'Valor' }, String(v.reason || '').trim().length < 3 && { text: 'Informe o motivo.', field: 'Motivo' }, String(v.evidence || '').trim().length < 3 && { text: 'Informe a evidência.', field: 'Evidência' }]}>Registrar {ADJ_KIND[v.kind]?.toLowerCase()}</SubmitButton></>}>
       {row && !result && (
         <div className="space-y-3">
           <Notice tone="info">Ajustes são lançamentos vinculados — os recebimentos anteriores são preservados. {row.confirmed_cents == null && 'Esta comissão ainda não foi confirmada: crédito/débito exigem confirmação; um estorno confirma a previsão pelo valor original para manter o rastro.'}</Notice>
@@ -505,7 +600,7 @@ function NewSettlement({ onClose, onCreated }) {
           Alocado {money(sum)} de {money(gross)}{diff !== 0 && gross ? ` · diferença ${money(diff)}` : ''}
         </span>
         <button className="btn-ghost" onClick={onClose}>Cancelar</button>
-        <button className="btn-primary" disabled={!valid || busy} onClick={submit}>{busy ? <Spinner className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />} Registrar liquidação</button>
+        <SubmitButton busy={busy} onClick={submit} problems={[!f.institution_id && { text: 'Escolha a seguradora.', field: 'Seguradora' }, !f.settled_date && 'Informe a data da liquidação.', !(gross > 0) && 'Informe o valor bruto recebido.', !selected.length && 'Marque as comissões que este pagamento quita.', selected.length > 0 && diff !== 0 && `O valor alocado precisa fechar com o bruto (diferença de ${money(diff)}).`, net < 0 && 'Retenções e deduções passam do bruto.', selected.some(([, c]) => !(c > 0)) && 'Há comissão marcada sem valor alocado.', unconfirmed.length > 0 && !f.confirm_missing && 'Há comissões ainda não confirmadas: marque a opção de confirmá-las pelo valor alocado.', f.retention_cents !== 0 && !String(f.retention_nature).trim() && 'Informe a natureza da retenção.']}>{busy ? <Spinner className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />} Registrar liquidação</SubmitButton>
       </>}>
       <div className="space-y-5">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -583,6 +678,7 @@ function Statements() {
   const files = useFetch(() => api.get('/v1/commissions/statements/files'), []);
   const [fileId, setFileId] = useState('');
   const [importOpen, setImportOpen] = useState(false);
+  const [ver, setVer] = useState(0);
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -607,69 +703,137 @@ function Statements() {
           </div>
         )}
       </Section>
-      <StatementLines fileId={fileId} files={files.data || []} onChanged={files.reload} />
-      {importOpen && <ImportStatement institutions={institutions} onClose={() => setImportOpen(false)} onDone={() => { files.reload(); }} />}
+      <StatementLines key={ver} fileId={fileId} files={files.data || []} onChanged={files.reload} />
+      {importOpen && <ImportStatement institutions={institutions} onClose={() => setImportOpen(false)} onDone={() => { files.reload(); setVer((v) => v + 1); }} />}
     </div>
   );
 }
 
+function downloadText(name, text, type = 'text/csv;charset=utf-8') {
+  const url = URL.createObjectURL(new Blob(['\uFEFF', text], { type }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function ImportStatement({ institutions, onClose, onDone }) {
   const [inst, setInst] = useState('');
-  const [file, setFile] = useState(null); // { filename, content }
+  const [raw, setRaw] = useState(null); // { filename, text?, headers, data, sheet }
+  const [mapping, setMapping] = useState({});
+  const [saved, setSaved] = useState({});
+  const [readErr, setReadErr] = useState(null);
+  const [reading, setReading] = useState(false);
   const [preview, setPreview] = useState(null);
   const [summary, setSummary] = useState(null);
   const [run, busy] = useAction();
+  useEffect(() => { api.get('/v1/commissions/statements/mappings').then(setSaved).catch(() => setSaved({})); }, []);
   const load = async (fl) => {
-    const content = await fileToText(fl);
-    setFile({ filename: fl.name, content });
-    setPreview(null); setSummary(null);
+    setReadErr(null); setPreview(null); setSummary(null); setReading(true);
+    try {
+      const sheet = isSheet(fl.name);
+      const text = sheet ? null : await fileToText(fl);
+      const rows = sheet ? await xlsxRows(fl) : csvRows(text);
+      const { headers, data } = splitHeader(rows);
+      if (!headers.length) throw new Error('Não encontramos o cabeçalho (nomes das colunas) no arquivo.');
+      setRaw({ filename: fl.name, text, headers, data, sheet });
+    } catch (e) { setRaw(null); setReadErr(e.message); } finally { setReading(false); }
   };
+  // sugestão de colunas: mapeamento salvo desta seguradora > nomes conhecidos
+  useEffect(() => { if (raw) setMapping(guessMapping(raw.headers, saved[inst] || {})); }, [raw, inst, saved]);
+  const missing = STATEMENT_FIELDS.filter((f) => f.required && !mapping[f.key]);
+  const native = raw && !raw.sheet && isNativeCsv(raw.headers, mapping);
+  const payload = useMemo(() => {
+    if (!raw || missing.length) return null;
+    return native ? { filename: raw.filename, content: raw.text }
+      : { filename: raw.sheet ? raw.filename.replace(/\.[^.]+$/, '.csv') : raw.filename, content: toCanonicalCsv(raw.headers, raw.data, mapping) };
+  }, [raw, mapping, native, missing.length]);
   useEffect(() => {
-    if (!inst || !file) return;
-    run(() => api.post('/v1/commissions/statements/preview', { institution_id: inst, ...file })).then((r) => { if (r !== FAIL) setPreview(r); });
-  }, [inst, file]); // eslint-disable-line
+    setPreview(null);
+    if (!inst || !payload) return undefined;
+    const t = setTimeout(() => {
+      run(() => api.post('/v1/commissions/statements/preview', { institution_id: inst, ...payload })).then((r) => { if (r !== FAIL) setPreview(r); });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [inst, payload]); // eslint-disable-line
   const doImport = async () => {
-    const r = await run(() => api.post('/v1/commissions/statements/import', { institution_id: inst, ...file }), 'Extrato importado.');
-    if (r !== FAIL) { setSummary(r.summary); onDone(); }
+    const r = await run(() => api.post('/v1/commissions/statements/import', { institution_id: inst, ...payload }), 'Extrato importado.');
+    if (r === FAIL) return;
+    setSummary(r.summary); onDone();
+    // lembra as colunas desta seguradora para a próxima importação
+    const prev = saved[inst] || {};
+    if (!native && JSON.stringify(prev) !== JSON.stringify(Object.fromEntries(Object.entries(mapping).filter(([, v]) => v)))) {
+      api.put(`/v1/commissions/statements/mappings/${inst}`, { columns: mapping }).catch(() => {});
+    }
   };
   const counts = useMemo(() => (preview?.lines || []).reduce((a, l) => ({ ...a, [l.match_status]: (a[l.match_status] || 0) + 1 }), {}), [preview]);
+  const problems = [
+    !inst && { text: 'Escolha a seguradora do extrato.', field: 'Seguradora' },
+    !raw && { text: 'Escolha o arquivo do extrato (CSV ou planilha).', field: 'Arquivo do extrato' },
+    ...missing.map((f) => ({ text: `Indique a coluna de “${f.label}”.`, field: f.label })),
+    preview?.duplicate_file && { text: 'Este arquivo já foi importado.' },
+    preview && !preview.lines.length && { text: 'Nenhuma linha nova para importar.' },
+    raw && inst && !missing.length && !preview && { text: 'Aguarde a prévia terminar.' },
+  ].filter(Boolean);
   return (
     <Modal open onClose={onClose} size="xl" title="Importar extrato de comissões" subtitle="Prévia antes de gravar: nada é conciliado na importação."
       footer={summary ? <button className="btn-primary" onClick={onClose}>Concluir</button> : <>
+        <button className="btn-ghost mr-auto" onClick={() => downloadText('modelo-extrato-comissoes.csv', TEMPLATE_CSV)}><Download className="h-4 w-4" /> Baixar modelo</button>
         <button className="btn-ghost" onClick={onClose}>Cancelar</button>
-        <button className="btn-primary" disabled={!preview || busy || !!preview.duplicate_file || !preview.lines.length} onClick={doImport}><Upload className="h-4 w-4" /> Importar {preview?.lines.length || 0} linha(s)</button>
+        <SubmitButton busy={busy} problems={problems} onClick={doImport}><Upload className="h-4 w-4" /> Importar {preview?.lines.length || 0} linha(s)</SubmitButton>
       </>}>
       <div className="space-y-4">
         {summary ? (
           <Notice tone="ok">
             Importação concluída: <b>{summary.inserted}</b> linha(s) gravada(s), {summary.duplicates_skipped} duplicada(s) ignorada(s), {summary.errors?.length || 0} rejeitada(s).
-            Revise e concilie as linhas pendentes na lista abaixo.
+            Revise e concilie as linhas pendentes na lista abaixo. As colunas escolhidas ficam lembradas para esta seguradora.
           </Notice>
         ) : (
           <>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Select label="Seguradora (obrigatório)" value={inst} onChange={(e) => setInst(e.target.value)}>
+              <Select label="Seguradora" value={inst} onChange={(e) => setInst(e.target.value)}>
                 <option value="">Selecione…</option>
-                {institutions.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                {institutions.map((i) => <option key={i.id} value={i.id}>{i.name}{saved[i.id] ? ' · colunas lembradas' : ''}</option>)}
               </Select>
               <div>
-                <span className="label">Arquivo CSV</span>
-                <FileButton accept=".csv,.txt,text/csv" onFile={load}><FileSpreadsheet className="h-4 w-4" /> {file ? file.filename : 'Escolher arquivo'}</FileButton>
+                <span className="label">Arquivo do extrato</span>
+                <FileButton accept=".csv,.txt,text/csv,.xlsx,.xlsm,.xls,.ods,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onFile={load}>
+                  {reading ? <Spinner className="h-4 w-4" /> : <FileSpreadsheet className="h-4 w-4" />} {raw ? raw.filename : 'Escolher CSV ou planilha (XLSX)'}
+                </FileButton>
+                <span className="mt-1 block text-xs text-ink-faint">Aceita o arquivo como a seguradora envia: CSV (; ou ,) ou Excel.</span>
               </div>
             </div>
-            <details className="rounded-app-sm border border-line p-3 text-sm">
-              <summary className="cursor-pointer font-medium">Colunas aceitas</summary>
-              <div className="mt-2 space-y-1 text-ink-soft">
-                <p>Separador <code>;</code> com cabeçalho na primeira linha:</p>
-                <code className="block overflow-x-auto rounded bg-muted px-2 py-1 text-xs">data;apolice;parcela;valor_bruto;retencao;tipo;id_externo;descricao</code>
-                <ul className="list-disc pl-5 text-xs">
-                  <li><b>valor_bruto</b> (ou valor/comissao) obrigatório; valor negativo em linha de comissão é tratado como estorno.</li>
-                  <li><b>tipo</b>: comissao, estorno, bonus, adiantamento ou ajuste (padrão: comissao).</li>
-                  <li><b>apolice</b> e <b>parcela</b> são a chave de correspondência; valor e data são apenas apoio.</li>
-                  <li><b>id_externo</b> evita duplicidade; linhas idênticas legítimas são preservadas.</li>
-                </ul>
-              </div>
-            </details>
+            {readErr && <Notice tone="danger">{readErr}</Notice>}
+            {raw && (
+              <Section title="Colunas do arquivo" subtitle={`${raw.data.length} linha(s) de dados · diga qual coluna corresponde a cada informação`}>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {STATEMENT_FIELDS.map((f) => (
+                    <Select key={f.key} label={`${f.label}${f.required ? ' *' : ''}`} hint={f.help} value={mapping[f.key] || ''}
+                      onChange={(e) => setMapping((m) => ({ ...m, [f.key]: e.target.value }))}>
+                      <option value="">{f.required ? 'Selecione…' : '— não tem —'}</option>
+                      {raw.headers.filter(Boolean).map((h, i) => <option key={`${h}-${i}`} value={h}>{h}</option>)}
+                    </Select>
+                  ))}
+                </div>
+                {raw.data[0] && (
+                  <p className="mt-3 text-xs text-ink-faint">1ª linha: {STATEMENT_FIELDS.filter((f) => mapping[f.key]).map((f) => `${f.label}: ${raw.data[0][raw.headers.indexOf(mapping[f.key])] || '—'}`).join(' · ')}</p>
+                )}
+              </Section>
+            )}
+            {!raw && (
+              <details className="rounded-app-sm border border-line p-3 text-sm">
+                <summary className="cursor-pointer font-medium">Como deve ser o arquivo?</summary>
+                <div className="mt-2 space-y-1 text-ink-soft">
+                  <p>Qualquer CSV ou planilha com cabeçalho na primeira linha. Depois de escolher o arquivo você indica qual coluna é qual. O modelo pronto usa:</p>
+                  <code className="block overflow-x-auto rounded bg-muted px-2 py-1 text-xs">data;apolice;parcela;valor_bruto;retencao;tipo;id_externo;descricao</code>
+                  <ul className="list-disc pl-5 text-xs">
+                    <li><b>valor bruto</b> é obrigatório; valor negativo em linha de comissão é tratado como estorno.</li>
+                    <li><b>tipo</b>: comissao, estorno, bonus, adiantamento ou ajuste (padrão: comissao).</li>
+                    <li><b>apólice</b> e <b>parcela</b> são a chave de correspondência; valor e data são apenas apoio.</li>
+                    <li><b>identificador</b> evita duplicidade; linhas idênticas legítimas são preservadas.</li>
+                  </ul>
+                </div>
+              </details>
+            )}
             {busy && !preview && <Loading />}
             {preview && (
               <div className="space-y-3">
@@ -741,7 +905,7 @@ function StatementLines({ fileId, files, onChanged }) {
           <option value="">Todas as situações</option>
           {Object.entries(LINE_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </Select>
-        {can('commissions_settle') && <button className="btn-primary" disabled={!sel.length || selInst.size > 1} onClick={() => setRecOpen(true)}><CheckCircle2 className="h-4 w-4" /> Conciliar selecionadas ({sel.length})</button>}
+        {can('commissions_settle') && <SubmitButton problems={[!sel.length && 'Marque as linhas pendentes (com comissão vinculada) que quer conciliar.', selInst.size > 1 && 'Selecione linhas de uma única seguradora.']} onClick={() => setRecOpen(true)}><CheckCircle2 className="h-4 w-4" /> Conciliar selecionadas ({sel.length})</SubmitButton>}
       </>} bodyClass="p-0">
       {selInst.size > 1 && <div className="p-3"><Notice tone="warn">Selecione linhas de uma única seguradora.</Notice></div>}
       {loading && !data ? <Loading /> : !lines.length ? <Empty title="Nenhuma linha nesta situação" /> : (
@@ -772,7 +936,7 @@ function StatementLines({ fileId, files, onChanged }) {
         </div>
       )}
       <Modal open={recOpen} onClose={() => setRecOpen(false)} title="Conciliar linhas selecionadas" subtitle={`${sel.length} linha(s)`}
-        footer={<><button className="btn-ghost" onClick={() => setRecOpen(false)}>Voltar</button><button className="btn-primary" disabled={busy || !rf.settled_date} onClick={reconcile}>Conciliar</button></>}>
+        footer={<><button className="btn-ghost" onClick={() => setRecOpen(false)}>Voltar</button><SubmitButton busy={busy} onClick={reconcile} problems={[!rf.settled_date && { text: 'Informe a data da liquidação.', field: 'Data da liquidação' }]}>Conciliar</SubmitButton></>}>
         <div className="space-y-3">
           <KV cols={3} items={[['Comissões (bruto)', money(selGross)], ['Retenção informada', money(selRet)], ['Estornos', money(selRev)]]} />
           <Notice>As linhas de comissão viram <b>uma</b> liquidação agrupada (um depósito para várias comissões). Comissões ainda não confirmadas são confirmadas pelo valor previsto. Estornos viram ajustes vinculados, com efeito nos repasses.</Notice>
@@ -822,7 +986,7 @@ function ResolveLine({ line, onClose, onDone }) {
   };
   return (
     <Modal open onClose={onClose} size="lg" title={`Resolver linha ${line.line_no}`} subtitle={`${line.policy_number || 'sem apólice'} · ${LINE_KIND[line.kind] || line.kind} · ${money(line.gross_cents)}`}
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!ok || busy} onClick={submit}>Aplicar</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={submit} problems={[v.action === 'vincular' && !v.receivable_id && 'Escolha a comissão para vincular.', String(v.note).trim().length < 3 && 'Escreva uma observação (mín. 3 caracteres).']}>Aplicar</SubmitButton></>}>
       <div className="space-y-3">
         {line.note && <Notice tone={line.status === 'divergente' ? 'warn' : 'info'}>{line.note}</Notice>}
         <Select label="Ação" value={v.action} onChange={(e) => setV({ ...v, action: e.target.value })}>
@@ -898,7 +1062,7 @@ function Agreements() {
         ))
       )}
       <Modal open={newOpen} onClose={() => setNewOpen(false)} title="Novo acordo de comissão"
-        footer={<><button className="btn-ghost" onClick={() => setNewOpen(false)}>Voltar</button><button className="btn-primary" disabled={busy || !na.institution_id || String(na.name || '').trim().length < 2} onClick={createAgreement}>Cadastrar</button></>}>
+        footer={<><button className="btn-ghost" onClick={() => setNewOpen(false)}>Voltar</button><SubmitButton busy={busy} onClick={createAgreement} problems={[!na.institution_id && { text: 'Escolha a seguradora.', field: 'Seguradora' }, String(na.name || '').trim().length < 2 && { text: 'Dê um nome ao acordo.', field: 'Nome' }]}>Cadastrar</SubmitButton></>}>
         <div className="grid gap-3 sm:grid-cols-2">
           <Select label="Seguradora" value={na.institution_id || ''} onChange={(e) => setNa({ ...na, institution_id: e.target.value })}>
             <option value="">Selecione…</option>
@@ -930,7 +1094,7 @@ function VersionModal({ agreement, onClose, onDone }) {
   };
   return (
     <Modal open onClose={onClose} size="lg" title="Nova versão da regra" subtitle={`${agreement.name} · ${agreement.institution_name || ''}`}
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!ok || busy} onClick={submit}>Registrar versão</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={submit} problems={[!(v.kind === 'percentual' ? rate != null && rate >= 0 && rate <= 100 : v.fixed_cents != null) && (v.kind === 'percentual' ? 'Informe o percentual (0 a 100).' : 'Informe o valor fixo.'), !v.valid_from && 'Informe o início da vigência da regra.', v.base_definition === 'outra' && !String(v.base_notes).trim() && 'Descreva a base comissionável.']}>Registrar versão</SubmitButton></>}>
       <div className="space-y-4">
         <Notice tone="warn">As versões anteriores continuam valendo para os contratos já firmados. Esta versão não altera comissões já previstas.</Notice>
         <div className="grid gap-3 sm:grid-cols-2">

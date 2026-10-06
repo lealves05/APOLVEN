@@ -279,6 +279,27 @@ async function matchLines(companyId, institutionId, lines) {
   return out;
 }
 
+// Mapeamento de colunas do extrato, lembrado por seguradora (fica nas configurações da corretora).
+const STATEMENT_FIELDS = ['data', 'apolice', 'parcela', 'valor_bruto', 'retencao', 'tipo', 'id_externo', 'descricao'];
+r.get('/statements/mappings', need('commissions_view'), async (req, res) => {
+  const c = await one('select settings from companies where id = $1', [req.companyId]);
+  res.json(c?.settings?.statement_mappings || {});
+});
+
+r.put('/statements/mappings/:institutionId', need('commissions_settle'), async (req, res) => {
+  const institutionId = parse(z.string().uuid(), req.params.institutionId);
+  const d = parse(z.object({ columns: z.record(z.enum(STATEMENT_FIELDS), z.string().trim().max(120)) }), req.body);
+  await institutionFor(null, req.companyId, institutionId);
+  const columns = Object.fromEntries(Object.entries(d.columns).filter(([, v]) => v));
+  await tx(async (db) => {
+    await db.query(`update companies set settings = coalesce(settings, '{}'::jsonb)
+        || jsonb_build_object('statement_mappings', coalesce(settings->'statement_mappings', '{}'::jsonb) || jsonb_build_object($2::text, $3::jsonb))
+      where id = $1`, [req.companyId, institutionId, JSON.stringify(columns)]);
+    await audit(db, req, { entity: 'company', entityId: req.companyId, action: 'statement.mapping', summary: 'Mapeamento de colunas do extrato de comissões atualizado', data: { institution_id: institutionId, columns } });
+  });
+  res.json({ institution_id: institutionId, columns });
+});
+
 r.post('/statements/preview', need('commissions_settle'), async (req, res) => {
   const d = parse(z.object({ institution_id: z.string().uuid(), filename: z.string().max(200), content: z.string().max(5_000_000) }), req.body);
   await institutionFor(null, req.companyId, d.institution_id);
