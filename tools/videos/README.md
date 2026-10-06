@@ -24,3 +24,21 @@ cp out/final/* ../../frontend/public/treinamento/ && node gen-training.mjs
 
 Roteiro: `lessons.mjs` (passos com `act` = o que acontece na tela e `say` = falas/legendas). A aula 25 mostra a própria
 tela de Suporte: grave-a depois das demais e do build do frontend.
+
+## Aula 27 — API de cotação da seguradora (seguradora fictícia)
+
+Usa a "Seguradora Exemplo S.A." (fictícia): `fake-seguradora-exemplo.mjs` serve o portal do desenvolvedor, o OAuth2
+client credentials (`/oauth/token`) e a API no padrão APOLVEN em HTTPS. Só para a gravação:
+
+```bash
+# certificados de teste em out/tls (CA própria + servidor para *.seguradora-exemplo.com.br) e nome → 127.0.0.1
+echo "127.0.0.1 api.seguradora-exemplo.com.br portal.seguradora-exemplo.com.br" >> /etc/hosts
+TLS_CERT=out/tls/server.crt TLS_KEY=out/tls/server.key node fake-seguradora-exemplo.mjs 443 &
+# API de gravação (porta 3334) com a CA de teste e APOLVEN_ALLOW_LOCAL_API=1 — nunca em produção
+NODE_EXTRA_CA_CERTS=$PWD/out/tls/ca.crt APOLVEN_ALLOW_LOCAL_API=1 ... node ../../backend/src/server.js &
+node record.mjs texts 27 && KOKORO_DIR=/caminho/dos/modelos python3 tts_batch.py
+node record.mjs rec 27 && python3 compose.py --sync 27-api-de-cotacao-da-seguradora
+```
+
+Depois: remova a linha do `/etc/hosts` e pare a seguradora de teste e a API de gravação. `compose.py --sync` alinha voz e
+legenda ao instante em que cada legenda aparece na imagem (útil quando a gravação "atrasa" em máquina carregada).

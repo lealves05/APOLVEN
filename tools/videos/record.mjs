@@ -10,8 +10,11 @@ import { chromium } from 'playwright';
 import pg from 'pg';
 import { LESSONS, MODULES } from './lessons.mjs';
 
-const B = 'http://apolven.lorler.com.br';
-const API = 'http://127.0.0.1:3334';
+const B = process.env.REC_BASE || 'http://apolven.lorler.com.br';
+const API = process.env.REC_API || 'http://127.0.0.1:3334';
+const DB = process.env.REC_DB || 'postgres://postgres:postgres@localhost:5432/apolven';
+// a demonstração exige login próprio: senha conhecida para as telas que pedem reautenticação
+export const DEMO_PASSWORD = 'Treinamento2026';
 const OUT = path.resolve('out');
 const [mode, ...rest] = process.argv.slice(2);
 const DRY = rest.includes('--dry');
@@ -23,7 +26,8 @@ const chunks = (say) => (Array.isArray(say) ? say : say ? [say] : []);
 
 if (mode === 'texts') {
   const items = [];
-  for (const l of LESSONS) {
+  const only2 = rest.filter((x) => /^\d+$/.test(x)).map(Number);
+  for (const l of LESSONS.filter((x) => !only2.length || only2.includes(x.n))) {
     items.push({ id: idOf(l.n, 'i', 0), text: l.intro || `Aula ${l.n}. ${l.title}.` });
     l.steps.forEach((s, i) => chunks(s.say).forEach((t, j) => items.push({ id: idOf(l.n, i, j), text: t })));
   }
@@ -36,9 +40,10 @@ const durs = DRY ? {} : JSON.parse(fs.readFileSync(path.join(OUT, 'tts', 'durati
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function newDemo() {
-  const db = new pg.Client('postgres://postgres:postgres@localhost:5432/apolven');
-  await db.connect(); await db.query('delete from apolven.rate_limits'); await db.end();
-  const r = await fetch(`${API}/api/auth/demo`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  try { const db = new pg.Client(DB); await db.connect(); await db.query('delete from apolven.rate_limits'); await db.end(); } catch { /* sem acesso ao banco: o IP fictício abaixo evita o limite */ }
+  const ip = `10.81.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250) + 1}`;
+  const r = await fetch(`${API}/api/auth/demo`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+    body: JSON.stringify({ name: 'Equipe de Treinamento', email: `aula${Date.now()}@demo.apolven.app`, password: DEMO_PASSWORD }) });
   const j = await r.json();
   if (!j.token) throw new Error('demo: ' + JSON.stringify(j));
   return j.token;
@@ -76,21 +81,33 @@ const OVERLAY = () => {
   #av-card .n{margin-top:48px;font:700 26px/1 Inter,system-ui;color:#bfdbfe}
   #av-card h1{margin:14px 0 0;font:800 60px/1.08 Inter,system-ui;max-width:1000px}
   #av-card p{margin:22px 0 0;font:400 26px/1.4 Inter,system-ui;max-width:900px;color:#dbeafe}
-  #av-card .m{position:absolute;bottom:56px;left:110px;font:600 18px/1 Inter,system-ui;color:#bfdbfe}`;
+  #av-card .m{position:absolute;bottom:56px;left:110px;font:600 18px/1 Inter,system-ui;color:#bfdbfe}
+  #av-card ul.b{margin:30px 0 0;padding:0;list-style:none;font:500 25px/1.45 Inter,system-ui;color:#e0ecff;max-width:1000px}
+  #av-card ul.b li{margin:10px 0;padding-left:42px;position:relative}
+  #av-card ul.b li::before{content:attr(data-i);position:absolute;left:0;top:3px;width:30px;height:30px;border-radius:50%;background:#fff;color:#1d4ed8;font:800 16px/30px Inter,system-ui;text-align:center}
+  #av-card .flow{display:flex;align-items:stretch;gap:16px;margin-top:34px;font:600 20px/1.35 Inter,system-ui}
+  #av-card .flow div{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);border-radius:16px;padding:16px 18px;flex:1}
+  #av-card .flow b{display:block;color:#fde68a;font:700 15px/1.2 ui-monospace,monospace;margin-top:8px;word-break:break-all}
+  #av-card .flow span.ar{flex:0 0 auto;align-self:center;font-size:30px;border:0;background:none;padding:0}
+  #av-step{position:fixed;top:66px;right:22px;z-index:2147483646;background:#1d4ed8;color:#fff;font:700 15px/1 Inter,system-ui,sans-serif;padding:9px 14px;border-radius:999px;
+    box-shadow:0 6px 18px rgba(29,78,216,.35);pointer-events:none;transition:opacity .25s}
+  #av-step:empty{opacity:0}`;
   document.head.appendChild(css);
   const mk = (id, html = '') => { const e = document.createElement('div'); e.id = id; e.innerHTML = html; document.body.appendChild(e); return e; };
   const cap = mk('av-cap');
   const spot = mk('av-spot');
+  const step = mk('av-step');
   const cur = mk('av-cur', '<svg width="26" height="26" viewBox="0 0 24 24"><path d="M4 2l15 11-6.5 1.2L16 21l-3 1.3-3.4-6.8L5 19z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg>');
   window.__av = {
     cap: (t) => { cap.textContent = t || ''; },
+    step: (t) => { step.textContent = t || ''; },
     spot: (r) => { if (!r) { spot.style.opacity = 0; return; } Object.assign(spot.style, { left: `${r.x - 7}px`, top: `${r.y - 7}px`, width: `${r.width + 14}px`, height: `${r.height + 14}px`, opacity: 1 }); },
     move: (x, y) => { cur.style.left = `${x}px`; cur.style.top = `${y}px`; },
     click: () => { cur.classList.remove('click'); void cur.offsetWidth; cur.classList.add('click'); },
     card: (h) => { let c = document.getElementById('av-card'); if (!h) { if (c) { c.style.opacity = 0; setTimeout(() => c.remove(), 520); } return; } if (!c) c = mk('av-card'); c.innerHTML = h; },
   };
   // a camada some se o app recriar o body: reinstala
-  new MutationObserver(() => { for (const e of [cap, spot, cur]) if (!e.isConnected) document.body.appendChild(e); }).observe(document.body, { childList: true });
+  new MutationObserver(() => { for (const e of [cap, spot, cur, step]) if (!e.isConnected) document.body.appendChild(e); }).observe(document.body, { childList: true });
 };
 
 function helpers(page, api, tl, t0) {
@@ -100,7 +117,7 @@ function helpers(page, api, tl, t0) {
   const loc = (target) => (typeof target === 'string' ? page.getByText(target, { exact: true }).locator('visible=true').first() : target.first());
   const settle = async (ms = 500) => { await page.waitForLoadState('networkidle', { timeout: 6000 }).catch(() => {}); await sleep(ms); await ensure(); };
   const h = {
-    page, api, now, warn, settle, sleep,
+    page, api, now, warn, settle, sleep, password: DEMO_PASSWORD, base: B,
     async go(route) { await page.goto(B + route); await settle(700); },
     async find(target, { timeout = 4000 } = {}) {
       const l = loc(target);
@@ -115,6 +132,10 @@ function helpers(page, api, tl, t0) {
       return l;
     },
     async unspot() { await page.evaluate(() => window.__av?.spot(null)); },
+    /** Selo "Passo n · assunto" no canto da tela (vazio = some). */
+    async step(t) { await ensure(); await page.evaluate(([x]) => window.__av.step(x), [t || '']); },
+    /** Cartão explicativo em tela cheia (mesmo visual da abertura); null fecha. */
+    async card(html) { await ensure(); await page.evaluate(([x]) => window.__av.card(x), [html]); await sleep(html ? 450 : 650); },
     async click(target, { wait = 700 } = {}) {
       const l = await h.spot(target, { pad: false }); if (!l) return false;
       await sleep(450); await page.evaluate(() => window.__av.click());
@@ -168,7 +189,7 @@ async function speak(page, tl, t0, id, text) {
 async function recordLesson(browser, l) {
   const token = await newDemo();
   const api = apiClient(token);
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo',
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo', ignoreHTTPSErrors: !!l.externalPages,
     recordVideo: DRY ? undefined : { dir: path.join(OUT, 'raw', 'tmp'), size: { width: 1280, height: 800 } } });
   await ctx.route(/fonts\.(googleapis|gstatic)/, (r) => r.abort());
   await ctx.addInitScript(([t]) => { try { localStorage.setItem('apolven.token', t); } catch { /* */ } }, [token]);
@@ -210,7 +231,7 @@ async function recordLesson(browser, l) {
 
 if (mode === 'rec') {
   if (DRY) fs.mkdirSync(path.join(OUT, 'dry'), { recursive: true });
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', env: { ...process.env, LANG: 'pt_BR.UTF-8', LANGUAGE: 'pt_BR' }, args: ['--lang=pt-BR', '--host-resolver-rules=MAP apolven.lorler.com.br 127.0.0.1', '--no-proxy-server'] });
+  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', env: { ...process.env, LANG: 'pt_BR.UTF-8', LANGUAGE: 'pt_BR' }, args: ['--lang=pt-BR', '--host-resolver-rules=MAP apolven.lorler.com.br 127.0.0.1, MAP *.seguradora-exemplo.com.br 127.0.0.1', '--no-proxy-server'] });
   for (const l of LESSONS.filter((x) => !only.length || only.includes(x.n))) {
     try { await recordLesson(browser, l); } catch (e) { console.error(`aula ${l.n} falhou:`, e); }
   }

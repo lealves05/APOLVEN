@@ -45,6 +45,11 @@ async function flow(api, { upTo = 'comparison' } = {}) {
   return st;
 }
 
+/** Cartões explicativos da aula 27 (mesmo visual do cartão de abertura). */
+const LOGO = '<span class="l"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></span>';
+const slide = (tag, title, body) => `<div class="k">${LOGO}APOLVEN · TREINAMENTO</div><div class="n">${tag}</div><h1 style="font-size:52px">${title}</h1>${body}<div class="m" style="bottom:auto;top:60px;left:auto;right:110px">Seguradora e credenciais fictícias</div>`;
+const list = (items) => `<ul class="b">${items.map((t, i) => `<li data-i="${i + 1}">${t}</li>`).join('')}</ul>`;
+
 export const LESSONS = [
   // ───────────────────────── Primeiros passos
   {
@@ -363,6 +368,99 @@ export const LESSONS = [
       { act: async (h) => { await h.unspot(); await h.scroll(500); await h.spot('Checklist do caminho'); }, say: ['O checklist lista os requisitos e documentos do credenciamento. Prepare o texto da solicitação de acesso e registre o protocolo.'] },
       { act: async (h) => { await h.unspot(); await h.top(); await h.spot(h.page.getByText('Etapa 3', { exact: false }).first()); }, say: ['Com o credenciamento aprovado, você informa as credenciais. Elas são guardadas cifradas e nunca voltam para a tela.'] },
       { act: async (h) => { await h.unspot(); await h.spot(h.page.getByText('Etapa 5', { exact: false }).first()); }, say: ['Depois do teste de conexão, cada função é ativada separadamente: cotação, transmissão, parcelas.', 'Enquanto isso não acontece, o trabalho continua no modo assistido, sem nenhum resultado simulado.'] },
+    ],
+  },
+  {
+    n: 27, file: '27-api-de-cotacao-da-seguradora', mod: 'cadastros', title: 'API de cotação da seguradora', routes: ['/integracoes/'], start: '/integracoes?tab=adicionar',
+    externalPages: true,
+    desc: 'Do pedido de acesso à cotação automática: OAuth2, teste de conexão, resultados ao vivo e contrato da API.',
+    learn: ['O que pedir à seguradora (credenciais, URLs, ambientes)', 'Configurar OAuth2 e testar a conexão', 'Cotar automaticamente e acompanhar os resultados', 'Contrato da API, segurança e LGPD'],
+    intro: 'Aula 27. API de cotação da seguradora: do pedido de acesso à cotação automática.',
+    setup: async (api) => {
+      // só seguradoras fictícias na tela: as conexões e produtos de exemplo da demonstração saem de cena
+      for (const c of await api('GET', '/v1/integrations/connections')) if (!c.revoked_at) await api('POST', `/v1/integrations/connections/${c.id}/revoke`, { reason: 'Aula: somente seguradoras fictícias' });
+      for (const p of await api('GET', '/v1/catalog/products')) if (['validado', 'ativo'].includes(p.status)) await api('POST', `/v1/catalog/products/${p.id}/status`, { status: 'retirado' });
+      const mk = async (name, template, path) => {
+        const i = await api('POST', '/v1/integrations/institutions', { kind: 'seguradora', name });
+        const c = await api('POST', '/v1/integrations/connections', { institution_id: i.id, template_code: template, products: ['auto'], accreditation: 'sim', environment: 'producao' });
+        if (path) {
+          await api('PUT', `/v1/integrations/connections/${c.id}/api-config`, { base_url: `https://api.seguradora-exemplo.com.br/${path}`, auth_type: 'bearer', secrets: { token: `tok-${path}` }, timeout_ms: 15000 });
+          await api('POST', `/v1/integrations/connections/${c.id}/connection-tests`, {});
+        }
+      };
+      await mk('Seguradora Modelo S.A.', 'api_padrao_apolven', 'modelo');
+      await mk('Seguradora Ilustrativa S.A.', 'api_padrao_apolven', 'ilustrativa');
+      await mk('Seguradora Demonstrativa S.A.', 'assistida', null);
+      const client = (await api('GET', '/v1/clients')).find((c) => c.kind === 'pf');
+      await api('POST', `/v1/clients/${client.id}/consents`, { purpose: 'cotacao', evidence: 'autorização por e-mail registrada' });
+      return { client };
+    },
+    steps: [
+      { act: (h) => h.card(slide('Passo 1 · Conceito', 'O que é a API de cotação', `<div class="flow"><div>API de cotação<b>automática · ofertas em segundos</b></div><div>Consulta assistida<b>a equipe pede e registra a resposta</b></div></div>`)),
+        say: ['Com a API de cotação, o APOLVEN consulta a seguradora sozinho e recebe as ofertas em segundos, sem digitação.',
+          'Sem API, a consulta é assistida: a equipe pede pelo canal oficial e registra a resposta. As duas convivem.'] },
+      { act: (h) => h.card(slide('Passo 2 · Antes de começar', 'O que pedir à seguradora', list(['Credenciamento da corretora e código comercial', 'Acesso ao portal do desenvolvedor', 'Credenciais de homologação e de produção (Client ID e Client Secret)', 'URL base da API de cotação', 'URL do token e escopos liberados']))),
+        say: ['Peça à seguradora, ou ao parceiro de integração: o credenciamento da corretora e o acesso ao portal do desenvolvedor.',
+          'Lá ficam as credenciais de homologação e de produção, a URL base da API, a URL do token e os escopos liberados.'] },
+      { act: (h) => h.card(slide('Passo 3 · O modelo das seguradoras', 'OAuth2 com client credentials', `<div class="flow"><div>1. APOLVEN envia Client ID + Client Secret<b>POST /oauth/token</b></div><span class="ar">→</span><div>2. Seguradora devolve o token de acesso<b>expires_in: 3600 (1 hora)</b></div><span class="ar">→</span><div>3. APOLVEN cota com o token<b>Authorization: Bearer …</b></div></div>`)),
+        say: ['A maioria das seguradoras usa OAuth2 com client credentials: o APOLVEN envia o Client ID e o Client Secret e recebe um token de acesso.',
+          'Com o token, válido por exemplo por uma hora, ele chama a API de cotação. Quando vence, pede outro sozinho.'] },
+      { act: async (h) => { await h.card(null); await h.page.goto('https://portal.seguradora-exemplo.com.br/'); await h.settle(600); await h.step('Passo 4 · Portal da seguradora'); await h.spot(h.page.locator('.tabs')); },
+        say: ['As credenciais ficam no portal do desenvolvedor da seguradora, aqui um portal fictício.',
+          'Homologação é o ambiente de testes; produção, o das cotações reais. Cada um tem o seu Client ID e o seu Client Secret.'] },
+      { act: async (h) => { await h.spot(h.page.locator('#cid')); await h.sleep(600); await h.click(h.page.locator('#gen')); await h.spot(h.page.locator('#credenciais')); },
+        say: ['Este é o Client ID. O Client Secret aparece uma única vez, ao ser gerado: guarde com cuidado, ele vale como uma senha.'] },
+      { act: async (h) => { await h.spot(h.page.locator('#enderecos')); },
+        say: ['Anote também a URL do token, a URL base da API e o escopo, aqui “cotacao”.'] },
+      { act: async (h) => { await h.unspot(); await h.go('/integracoes?tab=adicionar'); await h.step('Passo 5 · Cadastro da seguradora'); await h.type('Pesquisar empresa', 'Seguradora Exemplo', { delay: 18 }); await h.sleep(500); },
+        say: ['Agora, no APOLVEN: Seguradoras e integrações, Adicionar empresa. Pesquise a seguradora; se ela não estiver no catálogo, cadastre.'] },
+      { act: async (h) => { await h.click(h.page.getByRole('button', { name: 'Cadastrar empresa não encontrada' }).last()); await h.type('Nome comercial', 'Seguradora Exemplo S.A.', { delay: 18 }); await h.click(h.page.getByText('Esta empresa tem API de cotação', { exact: false })); },
+        say: ['Informe o nome e marque: “Esta empresa tem API de cotação”.'] },
+      { act: async (h) => { await h.click('Salvar cadastro assistido', { wait: 1500 }); await h.spot(h.page.getByText('API de cotação — padrão APOLVEN', { exact: true }).first()); },
+        say: ['O caminho “API de cotação, padrão APOLVEN” já vem escolhido.'] },
+      { act: async (h) => { await h.spot(h.page.getByLabel('Ambiente')); await h.page.getByLabel('Auto, moto e caminhão').check().catch(() => {}); await h.spot(h.page.getByText('Produtos desejados').first()); },
+        say: ['Confira o ambiente, produção, o credenciamento e marque os ramos que a seguradora cota pela API.'] },
+      { act: async (h) => { await h.click('Salvar e continuar', { wait: 1500 }); await h.step('Passo 6 · Configurar a API'); await h.type('Endereço base da API', 'https://api.seguradora-exemplo.com.br/apolven', { delay: 12 }); },
+        say: ['Na etapa 3 fica a API de cotação. Cole a URL base, sempre com https.'] },
+      { act: async (h) => { await h.select('Autenticação', 'OAuth2 (client credentials)'); await h.type('Endereço do token', 'https://api.seguradora-exemplo.com.br/oauth/token', { delay: 12 }); await h.type('Escopo', 'cotacao', { delay: 18 }); },
+        say: ['Em Autenticação, escolha OAuth2 client credentials e informe a URL do token e o escopo.'] },
+      { act: async (h) => { await h.type(h.page.locator('input[name="apv-api-client_id"]'), 'apolven-demo-01', { delay: 18 }); await h.type(h.page.locator('input[name="apv-api-client_secret"]'), 'sx-demo-8f3k-2025', { delay: 18 }); await h.spot(h.page.locator('input[name="apv-api-client_secret"]')); },
+        say: ['Digite o Client ID e o Client Secret. O secret fica mascarado na tela.'] },
+      { act: async (h) => { await h.unspot(); await h.spot(h.page.getByLabel('Tempo máximo de resposta (segundos)')); await h.type('Sua senha de acesso ao APOLVEN', h.password, { delay: 18 }); await h.click('Salvar API de cotação', { wait: 1500 }); },
+        say: ['Defina o tempo máximo, confirme com a sua senha e salve. As credenciais vão cifradas e nunca mais voltam para a tela.'] },
+      { act: async (h) => { await h.step('Passo 7 · Testar conexão'); await h.click(h.page.getByRole('button', { name: 'Testar conexão' }).last(), { wait: 2200 }); await h.spot(h.page.getByText('recusou as credenciais', { exact: false }).first()); },
+        say: ['Clique em Testar conexão. Aqui, um erro comum: o servidor de autorização recusou as credenciais.',
+          'Quase sempre é o secret digitado errado, de outro ambiente, ou já substituído no portal.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('button', { name: /Credenciais e acesso/ }).first(), { wait: 1000 }); await h.type(h.page.locator('input[name="apv-api-client_id"]'), 'apolven-demo-01', { delay: 18 }); await h.type(h.page.locator('input[name="apv-api-client_secret"]'), 'sx-demo-8f3k-2026', { delay: 18 }); await h.type('Sua senha de acesso ao APOLVEN', h.password, { delay: 18 }); await h.click('Salvar alterações', { wait: 1500 }); },
+        say: ['Para corrigir, volte à etapa 3, digite o secret correto e salve de novo.'] },
+      { act: async (h) => { await h.click(h.page.getByRole('button', { name: 'Testar conexão' }).last(), { wait: 2200 }); await h.spot(h.page.getByText('Acesso autenticado', { exact: false }).first()); },
+        say: ['Conexão aprovada: o token foi obtido, a API respondeu no padrão e a cotação automática foi ativada.'] },
+      { act: async (h, st) => { await h.unspot(); await h.go(`/cotacoes/nova?client=${st.client.id}&branch=auto`); await h.step('Passo 8 · Cotar'); await h.click('Avançar'); },
+        say: ['Vamos cotar. Em Nova cotação, escolha o cliente e o ramo, como de costume.'] },
+      { act: async (h, st) => {
+        await h.type('Marca / modelo', 'Hatch 1.0 Flex', { delay: 18 }); await h.type('Ano do modelo', '2024', { delay: 18 }); await h.select('Utilização', { value: 'particular' });
+        await h.type('CEP de pernoite', '13025-000', { delay: 18 }); await h.type('Condutor principal', st.client.name, { delay: 12 }); await h.click('Avançar');
+        await h.page.getByLabel(/^Casco/).check(); await h.page.getByLabel(/^RCF danos materiais/).check(); await h.page.getByLabel(/^RCF danos corporais/).check(); await h.sleep(500); await h.click('Avançar'); },
+        say: ['Preencha os dados do risco e as coberturas desejadas.'] },
+      { act: async (h) => { await h.spot(h.page.getByText('Seguradora Exemplo S.A.', { exact: true }).first()); },
+        say: ['Na etapa 4, a Seguradora Exemplo já aparece como automática, ao lado das outras fontes: automáticas ou assistidas.'] },
+      { act: async (h) => { await h.unspot(); await h.type('Base para compartilhar', 'pedido do cliente para cotação', { delay: 12 }); },
+        say: ['Informe a base para compartilhar os dados, exigida pela LGPD, e envie.'] },
+      { act: async (h) => { await h.click('Enviar cotação', { wait: 300 }); await h.step('Passo 9 · Resultados ao vivo'); },
+        say: ['Na etapa 5, Resultados, cada seguradora aparece com a situação ao vivo: consultando, cotação recebida, valor indicativo, recusa ou erro.'] },
+      { act: async (h) => { await h.sleep(800); await h.spot(h.page.locator('ul[aria-live] > li', { hasText: 'Seguradora Exemplo S.A.' })); },
+        say: ['A Seguradora Exemplo respondeu pela API: a oferta entra na comparação na hora. As assistidas aparecem quando a equipe registrar.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.locator('ul[aria-live] > li', { hasText: 'Seguradora Exemplo S.A.' }).getByRole('button', { name: 'Dados enviados e resposta' }), { wait: 1200 }); },
+        say: ['Em “Dados enviados e resposta” você vê quais dados foram para a seguradora e a resposta original. Só a equipe vê isso.'] },
+      { act: async (h) => { await h.esc(); await h.click('Escolher a melhor opção', { wait: 1000 }); await h.click('Gerar link para enviar', { wait: 1500 }); },
+        say: ['Escolha a melhor opção e gere o link do comparativo, pronto para enviar ao cliente pelo WhatsApp ou e-mail.'] },
+      { act: async (h) => { await h.esc(); await h.go('/integracoes?tab=contrato'); await h.step('Passo 10 · Contrato da API'); await h.spot(h.page.getByText('Regras', { exact: true }).first()); },
+        say: ['Por fim, a aba Contrato da API: é o que você envia à seguradora, ao parceiro ou ao integrador, com endereços, autenticação e regras.'] },
+      { act: async (h) => { await h.unspot(); await h.scroll(560); await h.spot(h.page.getByText('Schemas e exemplos', { exact: true }).first()); },
+        say: ['Os JSON Schemas e os exemplos de requisição e resposta estão aqui, para copiar ou baixar.'] },
+      { act: async (h) => { await h.unspot(); await h.step(''); await h.card(slide('Segurança e LGPD', 'O que o APOLVEN garante', list(['Somente endereços https públicos; redes internas e redirecionamentos são bloqueados', 'Credenciais cifradas no servidor, nunca exibidas de novo', 'Só os dados necessários para cotar: sem e-mail, telefone ou observações internas', 'Cada envio registrado: quais dados foram para qual seguradora, e quando']))); },
+        say: ['Segurança: só https público, credenciais cifradas, apenas os dados necessários e cada envio na auditoria.',
+          'Pronto: a sua seguradora com API já cota automaticamente.'] },
     ],
   },
   {

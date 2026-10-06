@@ -7,7 +7,9 @@ cache = 'cache'; os.makedirs(cache, exist_ok=True)
 # pronúncia: siglas e nomes
 FIX = [(r'\bAPOLVEN\b', 'Apolvén'), (r'\bCPF\b', 'cê pê éfe'), (r'\bCNPJ\b', 'cê ene pê jota'), (r'\bSUSEP\b', 'Susép'), (r'\bCSV\b', 'cê ésse vê'),
        (r'\bOFX\b', 'ó éfe xis'), (r'\bPDF\b', 'pê dê éfe'), (r'\bLGPD\b', 'éle gê pê dê'), (r'\bQR\b', 'quiú ár'), (r'\bRG\b', 'érre gê'), (r'\bCNH\b', 'cê ene agá'),
-       (r'\bAPI\b', 'a pê í'), (r'\bCRM\b', 'cê érre ême'), (r'\bRCF\b', 'érre cê éfe'), (r'\bWhatsApp\b', 'uótsápi'), (r'\bControl\b', 'Contról'), (r'\bK\b', 'cá')]
+       (r'\bAPI\b', 'a pê í'), (r'\bCRM\b', 'cê érre ême'), (r'\bRCF\b', 'érre cê éfe'), (r'\bWhatsApp\b', 'uótsápi'), (r'\bControl\b', 'Contról'), (r'\bK\b', 'cá'),
+       (r'\bOAuth2\b', 'ó áuti dois'), (r'\bOAuth\b', 'ó áuti'), (r'\bhttps\b', 'agá tê tê pê ésse'), (r'\bURL\b', 'u érre éle'), (r'\bJSON\b', 'djêisson'),
+       (r'\bClient ID\b', 'cláienti ái dí'), (r'\bClient Secret\b', 'cláienti síkret'), (r'\bsecret\b', 'síkret'), (r'\btoken\b', 'tôquen'), (r'\bBearer\b', 'bérer')]
 k = None; durs = {}
 for it in items:
     text = it['text'].strip()
@@ -15,7 +17,9 @@ for it in items:
     h = hashlib.sha1(f"pf_dora|1.0|{text}".encode()).hexdigest()[:16]
     cp = os.path.join(cache, h + '.wav')
     if not os.path.exists(cp):
-        if k is None: k = Kokoro('/home/claude/tts/kokoro-v1.0.onnx', '/home/claude/tts/voices-v1.0.bin')
+        if k is None:
+            d = os.environ.get('KOKORO_DIR', '/home/claude/tts')
+            k = Kokoro(os.path.join(d, 'kokoro-v1.0.onnx'), os.path.join(d, 'voices-v1.0.bin'))
         s, sr = k.create(text, voice='pf_dora', speed=1.0, lang='pt-br')
         sf.write(cp, s, sr)
     info = sf.info(cp)
