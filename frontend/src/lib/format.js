@@ -45,7 +45,7 @@ export const TASK_STATUS = {
   indeterminado: S('Resultado indeterminado', 'amber'), incompativel: S('Incompatível', 'red'), cancelada: S('Cancelada', 'gray'), pendente_assistida: S('Consulta assistida pendente', 'amber'),
 };
 export const QUOTE_REQUEST_STATUS = { rascunho: S('Rascunho', 'gray'), em_andamento: S('Em andamento', 'blue'), parcial: S('Resultado parcial', 'amber'), concluida: S('Concluída', 'green'), cancelada: S('Cancelada', 'gray') };
-export const COMPARISON_STATUS = { rascunho: S('Rascunho', 'gray'), aprovado: S('Aprovado', 'indigo'), enviado: S('Enviado ao cliente', 'blue'), escolhido: S('Cliente escolheu', 'green'), expirado: S('Expirado', 'orange'), cancelado: S('Cancelado', 'gray') };
+export const COMPARISON_STATUS = { rascunho: S('Rascunho', 'gray'), aprovado: S('Pronto para enviar', 'indigo'), enviado: S('Link enviado ao cliente', 'blue'), escolhido: S('Cliente escolheu', 'green'), expirado: S('Expirado', 'orange'), cancelado: S('Cancelado', 'gray') };
 export const CLASSIFICATION = { equivalente: S('Atende ao mínimo', 'green'), parcial: S('Parcialmente equivalente', 'amber'), incompativel: S('Não atende ao mínimo', 'red') };
 export const PROPOSAL_STATUS = {
   rascunho: S('Rascunho', 'gray'), aprovada_internamente: S('Aprovada internamente', 'indigo'), autorizada_cliente: S('Autorizada pelo cliente', 'teal'), transmitida: S('Transmitida', 'blue'),

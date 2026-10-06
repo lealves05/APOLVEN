@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import {
   PageHeader, Section, KV, Tabs, Stat, Modal, PromptModal, Input, Textarea, Select, Toggle, CentsInput, FileButton, StatusChip, Notice,
-  Empty, Loading, Spinner, cx, useFetch, useAction, FAIL,
+  Empty, Loading, Spinner, cx, useFetch, useAction, FAIL, SubmitButton, Hint,
 } from '../components/ui';
 import { useTable, SortTh, Pager } from '../components/Table';
 import { useAuth } from '../context/AuthContext';
@@ -110,7 +110,37 @@ function CoverageCell({ cov, min }) {
  * Tabela lado a lado (colunas = ofertas). Usada na tela interna, no comparativo do cliente e na impressão.
  * internal: mostra cenário, origem detalhada, pontuação e ações; showCommission só com permissão (rótulo "interno").
  */
-export function CompareGrid({ offers, minCoverages = [], badges, internal, showCommission, selectable, selected = [], onToggle, actions, chosenId, chosenPayment, soonDays, printMode }) {
+const COMMISSION_SOURCE = { retornada: 'retornada pela seguradora', condicao_interna: 'condição comercial interna' };
+
+/**
+ * No celular a grade mostra uma oferta por vez (seletor acima), para caber na tela;
+ * no computador e na impressão, todas lado a lado.
+ */
+export function CompareGrid(props) {
+  const { offers, printMode, chosenId } = props;
+  const [idx, setIdx] = useState(() => Math.max(0, offers.findIndex((o) => o.id === chosenId)));
+  if (printMode || offers.length < 2) return <GridTable {...props} />;
+  const cur = Math.min(idx, offers.length - 1);
+  return (
+    <>
+      <div className="hidden md:block"><GridTable {...props} /></div>
+      <div className="md:hidden">
+        <div className="mb-2 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Ofertas">
+          {offers.map((o, i) => (
+            <button key={o.id} type="button" role="tab" aria-selected={cur === i} onClick={() => setIdx(i)}
+              className={cx('shrink-0 rounded-app-sm border px-3 py-2 text-left text-xs', cur === i ? 'border-primary bg-primary/5' : 'border-line bg-surface')}>
+              <span className="block font-medium">Opção {i + 1} · {o.institution_name}</span>
+              <span className="block tabular-nums text-ink-soft">{money(o.total_premium_cents)}{props.selectable && props.selected?.includes(o.id) ? ' · marcada' : ''}</span>
+            </button>
+          ))}
+        </div>
+        <GridTable {...props} offers={[offers[cur]]} indexBase={cur} />
+      </div>
+    </>
+  );
+}
+
+function GridTable({ offers, minCoverages = [], badges, internal, showCommission, selectable, selected = [], onToggle, actions, chosenId, chosenPayment, soonDays, printMode, indexBase = 0 }) {
   const otherCodes = useMemo(() => {
     const min = new Set(minCoverages.map((m) => m.code));
     const map = new Map();
@@ -119,11 +149,11 @@ export function CompareGrid({ offers, minCoverages = [], badges, internal, showC
   }, [offers, minCoverages]);
   const Row = ({ label, hint, children, cls }) => (
     <tr className={cls}>
-      <th scope="row" className={cx('sticky left-0 z-[1] w-40 min-w-[9rem] border-b border-r border-line bg-muted px-3 py-2 text-left align-top text-xs font-medium text-ink-soft', printMode && 'static bg-zinc-100')}>
+      <th scope="row" className={cx('sticky left-0 z-[1] w-28 min-w-[6.5rem] border-b border-r border-line bg-muted px-3 py-2 text-left align-top text-xs font-medium text-ink-soft sm:w-40 sm:min-w-[9rem]', printMode && 'static bg-zinc-100')}>
         {label}{hint && <span className="mt-0.5 block font-normal text-ink-faint">{hint}</span>}
       </th>
       {offers.map((o, i) => (
-        <td key={o.id} className={cx('min-w-[12rem] border-b border-line px-3 py-2 align-top text-sm', o.status === 'retirada' && 'opacity-60', chosenId === o.id && 'bg-primary/5')}>{children(o, i)}</td>
+        <td key={o.id} className={cx('border-b border-line px-3 py-2 align-top text-sm', offers.length > 1 && 'min-w-[12rem]', o.status === 'retirada' && 'opacity-60', chosenId === o.id && 'bg-primary/5')}>{children(o, i)}</td>
       ))}
     </tr>
   );
@@ -133,7 +163,7 @@ export function CompareGrid({ offers, minCoverages = [], badges, internal, showC
         <thead>
           <tr>
             <th className={cx('sticky left-0 z-[2] border-b border-r border-line bg-muted px-3 py-2 text-left text-xs font-medium text-ink-faint', printMode && 'static')}>
-              {offers.length} opção(ões)
+              {offers.length === 1 && indexBase >= 0 && !printMode ? 'Oferta' : `${offers.length} opção(ões)`}
             </th>
             {offers.map((o, i) => (
               <th key={o.id} scope="col" className={cx('border-b border-line px-3 py-2 text-left align-top', chosenId === o.id && 'bg-primary/10')}>
@@ -143,7 +173,7 @@ export function CompareGrid({ offers, minCoverages = [], badges, internal, showC
                       disabled={o.status !== 'ativa' || expiredOf(o)} checked={selected.includes(o.id)} onChange={() => onToggle?.(o.id)} />
                   )}
                   <div className="min-w-0">
-                    <div className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">Opção {i + 1}</div>
+                    <div className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">Opção {i + 1 + indexBase}</div>
                     <div className="font-semibold">{o.institution_name}</div>
                     <div className="text-xs font-normal text-ink-soft">{o.product_name}</div>
                     {chosenId === o.id && <span className="chip mt-1 bg-primary text-primary-fg"><Check className="h-3 w-3" />Escolhida pelo cliente</span>}
@@ -209,7 +239,7 @@ export function CompareGrid({ offers, minCoverages = [], badges, internal, showC
           )}
           {internal && showCommission && (
             <Row label="Comissão (interno)" hint="não entra na pontuação" cls="bg-amber-500/5">{(o) => (
-              <span className="text-xs">{o.commission_rate == null ? 'não informada' : pct(o.commission_rate)}{o.commission_source ? ` · ${humanize(o.commission_source)}` : ''}</span>
+              <span className="text-xs">{o.commission_rate == null ? 'não informada' : pct(o.commission_rate)}{COMMISSION_SOURCE[o.commission_source] ? ` · ${COMMISSION_SOURCE[o.commission_source]}` : ''}</span>
             )}</Row>
           )}
           {internal && (
@@ -228,17 +258,43 @@ export function CompareGrid({ offers, minCoverages = [], badges, internal, showC
 export default function Quotes() {
   const { company, can, branchLabel } = useAuth();
   const [status, setStatus] = useState('');
+  const [term, setTerm] = useState('');
+  const [branch, setBranch] = useState('');
   const { data, loading } = useFetch(() => api.get(`/v1/quote-requests${qs({ status })}`), [status]);
-  const t = useTable(data || [], { sort: 'created_at', dir: 'desc', get: { client: (r) => r.client_name } });
+  const norm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const filtered = useMemo(() => {
+    const q = norm(term.trim());
+    return (data || []).filter((r) => (!branch || r.branch === branch)
+      && (!q || [docNumber(company?.settings, 'quote', r.number), r.number, r.title, r.client_name, branchLabel(r.branch)].some((x) => norm(x).includes(q))));
+  }, [data, term, branch]); // eslint-disable-line react-hooks/exhaustive-deps
+  const branches = useMemo(() => [...new Set((data || []).map((r) => r.branch))], [data]);
+  const t = useTable(filtered, { sort: 'created_at', dir: 'desc', get: { client: (r) => r.client_name } });
   return (
     <>
       <PageHeader title="Cotações e multicálculo" subtitle="Rodadas por seguradora, respostas parciais e comparação técnica transparente."
         actions={can('quotes_manage') && <Link to="/cotacoes/nova" className="btn-primary"><Plus className="h-4 w-4" />Nova cotação</Link>} />
       <Tabs value={status} onChange={setStatus} tabs={[{ value: '', label: 'Todas' }, ...Object.entries(QUOTE_REQUEST_STATUS).map(([value, s]) => ({ value, label: s.label }))]} />
+      {data?.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <label className="relative block w-full sm:w-96">
+            <span className="sr-only">Buscar cotação</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+            <input className="input pl-9" placeholder="Buscar por cliente, número ou título" value={term} onChange={(e) => setTerm(e.target.value)} />
+          </label>
+          {branches.length > 1 && (
+            <select className="input w-full sm:w-56" aria-label="Ramo" value={branch} onChange={(e) => setBranch(e.target.value)}>
+              <option value="">Todos os ramos</option>
+              {branches.map((b) => <option key={b} value={b}>{branchLabel(b)}</option>)}
+            </select>
+          )}
+          {(term || branch) && <span className="text-xs text-ink-faint">{filtered.length} de {data.length}</span>}
+        </div>
+      )}
       {loading ? <Loading /> : !data?.length ? (
         <div className="card"><Empty icon={Calculator} title="Nenhuma cotação" text="Crie uma cotação para consultar as seguradoras elegíveis e comparar as respostas."
           action={can('quotes_manage') && <Link to="/cotacoes/nova" className="btn-primary"><Plus className="h-4 w-4" />Nova cotação</Link>} /></div>
       ) : (
+        !filtered.length ? <div className="card"><Empty icon={Search} title="Nenhuma cotação encontrada" text="Revise a busca ou o filtro de ramo." action={<button className="btn-outline" onClick={() => { setTerm(''); setBranch(''); }}>Limpar busca</button>} /></div> : (
         <div className="card overflow-x-auto">
           <table className="table-clean">
             <thead><tr>
@@ -262,6 +318,7 @@ export default function Quotes() {
           </table>
           <Pager t={t} />
         </div>
+        )
       )}
     </>
   );
@@ -562,20 +619,36 @@ export function QuoteNew() {
   // ao trocar o ramo, o formulário e as coberturas recomeçam (campos diferentes por ramo)
   const lastBranch = useRef(branch);
   useEffect(() => { if (lastBranch.current !== branch) { setRisk({}); setCovs([]); setSources('all'); lastBranch.current = branch; } }, [branch]);
+  // já no passo 1: há seguradora que possa receber esta cotação? (evita descobrir só no fim)
+  useEffect(() => {
+    setEligibleCount(null);
+    if (!branch) return;
+    let alive = true;
+    api.get(`/v1/catalog/eligible?branch=${encodeURIComponent(branch)}`).then((d) => { if (alive) setEligibleCount(d.eligible.length); }).catch(() => {});
+    return () => { alive = false; };
+  }, [branch]);
 
   const schema = branch ? meta?.risk_schemas?.[branch] : null;
   const catalog = branch ? meta?.coverage_catalog?.[branch] || [] : [];
   const missing = missingRisk(schema, risk);
 
-  const canNext = [
-    !!client && !!branch,
-    missing.length === 0,
-    true,
-    sharing.trim().length >= 3 && (sources === 'all' ? eligibleCount !== 0 : sources.length > 0) && (!start || !end || end > start),
-  ];
+  const fieldLabel = (k) => (schema?.fields || []).find((f) => f.key === k)?.label || k;
+  const stepProblems = [
+    [
+      !client && { text: 'Escolha o cliente.', field: 'Cliente' },
+      !branch && { text: 'Escolha o ramo do seguro.', field: 'Ramo' },
+      branch && eligibleCount === 0 && { text: 'Nenhuma seguradora habilitada para este ramo — cadastre em Seguradoras e integrações.' },
+    ],
+    missing.map((k) => ({ text: `Preencha “${fieldLabel(k)}”.`, field: fieldLabel(k) })),
+    [start && end && end <= start && { text: 'O fim da vigência deve ser posterior ao início.', field: 'Fim' }],
+    [
+      sources === 'all' ? eligibleCount === 0 && { text: 'Nenhuma seguradora elegível para este ramo.' } : !sources.length && { text: 'Marque ao menos uma seguradora.' },
+      sharing.trim().length < 3 && { text: 'Informe a base para compartilhar os dados com as seguradoras.', field: 'Base para compartilhar' },
+      start && end && end <= start && { text: 'O fim da vigência deve ser posterior ao início.' },
+    ],
+  ].map((l) => l.filter(Boolean));
 
   const goNext = () => {
-    if (step === 1 && missing.length) { setHighlight(missing); return; }
     setHighlight([]);
     setStep((s) => Math.min(3, s + 1));
   };
@@ -626,6 +699,13 @@ export function QuoteNew() {
               </Select>
               <Input label="Título (opcional)" className="sm:col-span-2" value={title} placeholder={branch ? branchLabel(branch) : 'ex.: Auto — carro novo'} onChange={(e) => setTitle(e.target.value)} />
             </div>
+            {branch && eligibleCount === 0 && (
+              <Notice tone="danger" className="mt-4">
+                <b>Nenhuma seguradora pode receber cotações de {branchLabel(branch)} ainda.</b> Cadastre a seguradora com credenciamento confirmado e o produto deste ramo antes de continuar.{' '}
+                <Link to="/integracoes" className="font-medium underline">Cadastrar seguradora</Link>
+              </Notice>
+            )}
+            {branch && eligibleCount > 0 && <p className="mt-3 text-xs text-ink-faint">{eligibleCount} seguradora(s) habilitada(s) para este ramo.</p>}
             {schema?.sensitive && <Notice tone="warn" className="mt-4">Este ramo envolve dados sensíveis: é preciso ter a autorização específica do cliente registrada antes de cotar. Questionários clínicos não são preenchidos aqui.</Notice>}
           </Section>
         )}
@@ -674,11 +754,11 @@ export function QuoteNew() {
           </>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <button className="btn-ghost" disabled={step === 0} onClick={() => setStep((s) => s - 1)}><ChevronLeft className="h-4 w-4" />Voltar</button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button className="btn-ghost mr-auto" disabled={step === 0} onClick={() => setStep((s) => s - 1)}><ChevronLeft className="h-4 w-4" />Voltar</button>
           {step < 3
-            ? <button className="btn-primary" disabled={step !== 1 && !canNext[step]} onClick={goNext}>Avançar<ChevronRight className="h-4 w-4" /></button>
-            : <button className="btn-primary" disabled={!canNext[3] || busy} onClick={submit}>{busy ? <Spinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}Criar cotação e distribuir</button>}
+            ? <SubmitButton problems={stepProblems[step]} onClick={goNext} onMouseDown={() => step === 1 && missing.length && setHighlight(missing)}>Avançar<ChevronRight className="h-4 w-4" /></SubmitButton>
+            : <SubmitButton busy={busy} problems={stepProblems[3]} onClick={submit}>{busy ? <Spinner className="h-4 w-4" /> : <Send className="h-4 w-4" />}Criar cotação e distribuir</SubmitButton>}
         </div>
       </div>
     </>
@@ -835,7 +915,7 @@ export function QuoteDetail() {
           <Section title="Comparação das ofertas" subtitle="Requisitos mínimos primeiro; pontuação só para ofertas que atendem e estão na validade."
             actions={<>
               {withdrawnCount > 0 && <Toggle checked={showWithdrawn} onChange={setShowWithdrawn} label={`Mostrar retiradas (${withdrawnCount})`} />}
-              {manage && <button className="btn-primary" disabled={!selected.length} onClick={() => setCompOpen(true)}><FileText className="h-4 w-4" />Gerar comparativo ({selected.length})</button>}
+              {manage && <SubmitButton problems={!selected.length ? ['Marque, na comparação abaixo, as ofertas que vão ao cliente (caixa ao lado do nome da seguradora).'] : []} onClick={() => setCompOpen(true)}><Send className="h-4 w-4" />Enviar ao cliente ({selected.length})</SubmitButton>}
             </>}>
             {!offers.length ? (
               <Empty title="Nenhuma oferta ainda" text={round.tasks.some((t) => t.status === 'pendente_assistida') ? 'Registre as respostas das consultas assistidas acima para comparar.' : 'Aguarde o retorno das fontes.'} />
@@ -895,34 +975,58 @@ export function QuoteDetail() {
         subtitle={withdraw ? `${withdraw.institution_name} — ${withdraw.product_name}. A oferta sai da comparação e fica no histórico.` : ''}
         onClose={() => setWithdraw(null)}
         onSubmit={async (v) => { const r = await run(() => api.post(`/v1/quote-requests/offers/${withdraw.id}/withdraw`, { reason: v.reason }), 'Oferta retirada.'); if (r !== FAIL) { setWithdraw(null); reload(); } }} />
-      {compOpen && <NewComparisonModal round={round} offerIds={selected} onClose={() => setCompOpen(false)} onDone={(c) => nav(`/comparativos/${c.id}`)} />}
+      {compOpen && <NewComparisonModal round={round} offerIds={selected} client={{ id: data.client_id, name: data.client_name }} branchName={branchLabel(data.branch)}
+        onClose={() => setCompOpen(false)} onDone={(c) => nav(`/comparativos/${c.id}`)} />}
       {newRound && <NewRoundModal request={data} round={round} onClose={() => setNewRound(false)} onDone={() => { setNewRound(false); setSp({}); if (!roundParam) reload(); }} />}
     </>
   );
 }
 
-function NewComparisonModal({ round, offerIds, onClose, onDone }) {
+function NewComparisonModal({ round, offerIds, client, branchName, onClose, onDone }) {
+  const { can, company } = useAuth();
+  const { toast } = useUI();
   const [run, busy] = useAction();
-  const [message, setMessage] = useState('');
-  const [err, setErr] = useState(null);
   const offers = round.offers.filter((o) => offerIds.includes(o.id));
+  const first = (client?.name || '').split(' ')[0];
+  const [message, setMessage] = useState(() => `Olá${first ? `, ${first}` : ''}! Separei ${offers.length > 1 ? `${offers.length} opções` : 'uma opção'} de seguro para você comparar com calma. Escolha a que preferir direto pelo link — qualquer dúvida, é só me chamar.`);
+  const [err, setErr] = useState(null);
+  const [created, setCreated] = useState(null);
+  const [link, setLink] = useState(null);
+  const [phone, setPhone] = useState(null);
+  useEffect(() => { if (client?.id) api.get(`/v1/clients/${client.id}`).then((x) => setPhone((x?.client || x)?.phone || null)).catch(() => {}); }, [client?.id]);
   const incompatible = offers.filter((o) => o.comparison?.klass === 'incompativel');
+  const indicative = offers.filter((o) => o.quote_kind === 'valor_indicativo');
+  const canSend = can('comparisons_send');
   const submit = async () => {
     setErr(null);
-    const r = await run(() => api.post('/v1/comparisons', { round_id: round.id, offer_ids: offerIds, message: message.trim() || null }), 'Comparativo gerado.',
+    const r = await run(() => api.post('/v1/comparisons', { round_id: round.id, offer_ids: offerIds, message: message.trim() || null }), null,
       (e) => { if (e.code === 'QUOTE_EXPIRED') { setErr(e.message); return true; } return false; });
-    if (r !== FAIL) onDone(r);
+    if (r === FAIL) return;
+    // aprovado e com permissão de envio: o link sai no mesmo passo
+    if (r.status !== 'rascunho' && canSend) {
+      const l = await run(() => api.post(`/v1/comparisons/${r.id}/link`), 'Comparativo e link gerados.');
+      if (l !== FAIL) { setCreated(r); setLink(l); return; }
+    } else toast(r.status === 'rascunho' ? 'Comparativo gerado. Ele precisa ser aprovado antes do envio.' : 'Comparativo gerado.');
+    onDone(r);
   };
+  if (link) {
+    return <LinkModal link={link} view={{ client: { name: client?.name }, branch: branchName }} phone={phone} settings={company?.settings} toast={toast} onClose={() => onDone(created)} />;
+  }
   return (
-    <Modal open onClose={onClose} title="Gerar comparativo para o cliente" subtitle={`${offers.length} oferta(s) selecionada(s)`}
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={busy} onClick={submit}>Gerar comparativo</button></>}>
+    <Modal open onClose={onClose} title={canSend ? 'Enviar comparativo ao cliente' : 'Gerar comparativo para o cliente'} subtitle={`${offers.length} oferta(s) selecionada(s)`}
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button>
+        <button className="btn-primary" disabled={busy} onClick={submit}>{busy ? <Spinner className="h-4 w-4" /> : canSend ? <Send className="h-4 w-4" /> : <FileText className="h-4 w-4" />}{canSend ? 'Gerar link para enviar' : 'Gerar comparativo'}</button></>}>
       <div className="space-y-3">
         <ul className="text-sm">{offers.map((o) => <li key={o.id} className="flex justify-between gap-2 border-b border-line py-1.5"><span>{o.institution_name} — {o.product_name}</span><b className="tabular-nums">{money(o.total_premium_cents)}</b></li>)}</ul>
         {incompatible.length > 0 && <Notice tone="warn">{incompatible.length} oferta(s) não atendem ao mínimo pedido. Elas aparecerão ao cliente identificadas como tal, com as diferenças.</Notice>}
-        {offers.some((o) => o.quote_kind === 'valor_indicativo') && <Notice tone="warn">Há valor indicativo na seleção: o cliente verá que precisa de confirmação da seguradora.</Notice>}
+        {indicative.length > 0 && (
+          <Notice tone="warn">
+            <b>{indicative.length === 1 ? '1 opção tem' : `${indicative.length} opções têm`} valor indicativo</b> ({indicative.map((o) => o.institution_name).join(', ')}): o cliente vê a opção, mas <b>não consegue escolhê-la</b> até a seguradora confirmar o preço. Registre a cotação válida e gere um novo comparativo quando chegar.
+          </Notice>
+        )}
         {err && <Notice tone="danger">{err} Crie uma nova rodada (recalcular) para obter valores na validade.</Notice>}
-        <Textarea label="Mensagem ao cliente (opcional)" rows={4} value={message} onChange={(e) => setMessage(e.target.value)} />
-        <p className="text-xs text-ink-faint">O cliente não vê comissão, notas internas nem dados de credenciais.</p>
+        <Textarea label="Mensagem que aparece no topo do link (pode editar)" rows={4} value={message} onChange={(e) => setMessage(e.target.value)} />
+        <p className="text-xs text-ink-faint">{canSend ? 'Ao gerar, você recebe o link e a mensagem prontos para enviar pelo WhatsApp. ' : ''}O cliente não vê comissão, notas internas nem dados de credenciais.</p>
       </div>
     </Modal>
   );
@@ -936,14 +1040,14 @@ function TaskStatusModal({ task, onClose, onDone }) {
   const [protocol, setProtocol] = useState('');
   const refusal = status === 'recusa_informada';
   const technical = ['fonte_indisponivel', 'tempo_excedido'].includes(status);
-  const ok = !refusal || (reason.trim().length >= 3 && protocol.trim().length >= 1);
   const submit = async () => {
     const r = await run(() => api.put(`/v1/quote-requests/tasks/${task.id}`, { status, reason: reason.trim() || null, protocol: protocol.trim() || null }), 'Situação atualizada.');
     if (r !== FAIL) onDone();
   };
   return (
     <Modal open onClose={onClose} title="Atualizar situação da consulta" subtitle={`${task.institution_name} · ${SCENARIOS[task.scenario]?.label || task.scenario} · ${MODE[task.mode]}`}
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!ok || busy} onClick={submit}>Salvar</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={submit}
+        problems={refusal ? [reason.trim().length < 3 && { text: 'Recusa exige o motivo informado pela seguradora.', field: 'Motivo' }, !protocol.trim() && { text: 'Recusa exige o protocolo da resposta.', field: 'Protocolo' }] : []}>Salvar</SubmitButton></>}>
       <div className="space-y-3">
         <Select label="Nova situação" value={status} onChange={(e) => setStatus(e.target.value)}>
           {allowed.map((k) => <option key={k} value={k}>{TASK_STATUS[k]?.label || k}</option>)}
@@ -960,7 +1064,7 @@ function TaskStatusModal({ task, onClose, onDone }) {
 }
 
 // ---------- Registro de resposta formal (consulta assistida) ----------
-const emptyPay = () => ({ method: 'boleto', installments: 1, first_cents: null, installment_cents: null, total_cents: null, note: '' });
+const emptyPay = (total = null) => ({ method: 'boleto', installments: 1, first_cents: null, installment_cents: null, total_cents: total, note: '', autoTotal: true });
 
 function RegisterOfferModal({ task, request, round, onClose, onDone }) {
   const { can, meta } = useAuth();
@@ -977,10 +1081,14 @@ function RegisterOfferModal({ task, request, round, onClose, onDone }) {
   const [doc, setDoc] = useState(null);
   const [uploading, setUploading] = useState(false);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  // à vista (1x) sem total digitado: o total da opção acompanha o prêmio total informado
+  useEffect(() => {
+    setPays((l) => l.map((p) => (p.autoTotal && Number(p.installments) === 1 && !p.installment_cents ? { ...p, total_cents: f.total_premium_cents } : p)));
+  }, [f.total_premium_cents]);
   const patchCov = (i, p) => setCovs((l) => l.map((c, j) => (j === i ? { ...c, ...p } : c)));
   const patchPay = (i, p) => setPays((l) => l.map((c, j) => {
     if (j !== i) return c;
-    const n = { ...c, ...p };
+    const n = { ...c, ...p, ...('total_cents' in p ? { autoTotal: false } : {}) };
     // sugere o total da opção a partir de entrada + parcelas (o usuário pode corrigir)
     if (('first_cents' in p || 'installment_cents' in p || 'installments' in p) && n.installment_cents) {
       n.total_cents = (n.first_cents ?? n.installment_cents) + n.installment_cents * Math.max(0, n.installments - 1);
@@ -999,15 +1107,15 @@ function RegisterOfferModal({ task, request, round, onClose, onDone }) {
   };
 
   const problems = [];
-  if (f.product_name.trim().length < 2) problems.push('Informe o produto.');
-  if (!f.total_premium_cents) problems.push('Informe o prêmio total.');
+  if (f.product_name.trim().length < 2) problems.push({ text: 'Informe o produto.', field: 'Produto' });
+  if (!f.total_premium_cents) problems.push({ text: 'Informe o prêmio total.', field: 'Prêmio total' });
   if (f.quote_kind === 'cotacao_valida') {
-    if (f.origin === 'documento_formal' && !doc) problems.push('Cotação válida por documento formal exige o documento anexado.');
-    if (f.origin === 'informada_pela_seguradora' && !f.external_id.trim()) problems.push('Cotação válida informada pela seguradora exige o número/protocolo.');
-    if (!f.valid_until) problems.push('Informe a validade da cotação.');
+    if (f.origin === 'documento_formal' && !doc) problems.push({ text: 'Anexe o documento da cotação (exigido para cotação válida por documento formal).', field: 'Cotação formal' });
+    if (f.origin === 'informada_pela_seguradora' && !f.external_id.trim()) problems.push({ text: 'Informe o nº/protocolo da cotação na seguradora.', field: 'Nº / protocolo' });
+    if (!f.valid_until) problems.push({ text: 'Informe a validade da cotação.', field: 'Validade' });
   }
-  if (f.valid_until && f.valid_until < ymd()) problems.push('A validade informada já passou.');
-  if (pays.some((p) => !p.total_cents)) problems.push('Cada forma de pagamento precisa do total da opção (ou remova a linha).');
+  if (f.valid_until && f.valid_until < ymd()) problems.push({ text: 'A validade informada já passou.', field: 'Validade' });
+  pays.forEach((p, i) => { if (!p.total_cents) problems.push({ text: `Forma de pagamento ${i + 1}: informe o total da opção (ou remova a linha).`, field: `#pay-total-${i}` }); });
 
   const submit = async () => {
     const body = {
@@ -1027,9 +1135,8 @@ function RegisterOfferModal({ task, request, round, onClose, onDone }) {
   return (
     <Modal open size="xl" onClose={onClose} title="Registrar resposta da seguradora" subtitle={`${task.institution_name} · ${SCENARIOS[task.scenario]?.label || task.scenario} · consulta assistida`}
       footer={<>
-        {problems.length > 0 && <span className="mr-auto text-xs text-amber-700 dark:text-amber-300">{problems[0]}</span>}
         <button className="btn-ghost" onClick={onClose}>Voltar</button>
-        <button className="btn-primary" disabled={busy || problems.length > 0} onClick={submit}>Registrar resposta</button>
+        <SubmitButton busy={busy} problems={problems} onClick={submit}>Registrar resposta</SubmitButton>
       </>}>
       <div className="space-y-5">
         <Notice>Transcreva somente o que consta na resposta formal da seguradora. Campo não informado fica em branco — <b>nunca use zero</b> para o que a fonte não informou.</Notice>
@@ -1117,7 +1224,7 @@ function RegisterOfferModal({ task, request, round, onClose, onDone }) {
                 <Input label="Parcelas" type="number" min={1} max={24} value={p.installments} onChange={(e) => patchPay(i, { installments: Math.min(24, Math.max(1, Number(e.target.value) || 1)) })} />
                 <CentsInput label="1ª parcela" value={p.first_cents} onChange={(v) => patchPay(i, { first_cents: v })} />
                 <CentsInput label="Demais parcelas" value={p.installment_cents} onChange={(v) => patchPay(i, { installment_cents: v })} />
-                <CentsInput label="Total da opção *" value={p.total_cents} onChange={(v) => patchPay(i, { total_cents: v })} />
+                <CentsInput id={`pay-total-${i}`} label="Total da opção *" hint={p.autoTotal && Number(p.installments) === 1 && f.total_premium_cents ? 'igual ao prêmio total' : undefined} value={p.total_cents} onChange={(v) => patchPay(i, { total_cents: v })} />
                 <button className="btn-ghost btn-icon mb-0.5" aria-label="Remover opção" onClick={() => setPays((l) => l.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4" /></button>
               </div>
             ))}
@@ -1168,7 +1275,6 @@ function NewRoundModal({ request, round, onClose, onDone }) {
   const [sharing, setSharing] = useState(round?.preferences?.sharing_basis || '');
   const [err, setErr] = useState(null);
   const missing = missingRisk(schema, risk);
-  const ok = !missing.length && sharing.trim().length >= 3 && (sources === 'all' || sources.length > 0) && (!start || !end || end > start);
   const submit = async () => {
     setErr(null);
     const body = { risk, min_coverages: covs, preferences: prefsPayload(prefs), start_date: start || null, end_date: end || null, sources: sources === 'all' ? [] : sources, scenarios, sharing_basis: sharing.trim() };
@@ -1178,9 +1284,13 @@ function NewRoundModal({ request, round, onClose, onDone }) {
   return (
     <Modal open size="xl" onClose={onClose} title="Nova rodada (recalcular)" subtitle="A rodada atual fica preservada; resultados tardios continuam nela."
       footer={<>
-        {missing.length > 0 && <span className="mr-auto text-xs text-amber-700 dark:text-amber-300">Faltam: {missing.join(', ')}</span>}
         <button className="btn-ghost" onClick={onClose}>Voltar</button>
-        <button className="btn-primary" disabled={!ok || busy} onClick={submit}>{busy ? <Spinner className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}Criar rodada</button>
+        <SubmitButton busy={busy} onClick={submit} problems={[
+          ...missing.map((k) => { const l = (schema?.fields || []).find((x) => x.key === k)?.label || k; return { text: `Preencha “${l}”.`, field: l }; }),
+          sharing.trim().length < 3 && { text: 'Informe a base para compartilhar os dados com as seguradoras.', field: 'Base para compartilhar' },
+          sources !== 'all' && !sources.length && { text: 'Marque ao menos uma seguradora.' },
+          start && end && end <= start && { text: 'O fim da vigência deve ser posterior ao início.', field: 'Fim da vigência' },
+        ]}>{busy ? <Spinner className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}Criar rodada</SubmitButton>
       </>}>
       <div className="space-y-5">
         <RoundErrorNotice err={err} clientId={request.client_id} />
@@ -1298,7 +1408,7 @@ export function ComparisonDetail() {
 
         {can('commissions_view') && c.internal_offers?.some((o) => o.commission_rate != null) && (
           <Section title="Informação interna (não aparece ao cliente)" className="border-amber-500/30">
-            <ul className="space-y-1 text-sm">{c.internal_offers.map((o) => <li key={o.id}>{o.institution_name} — {o.product_name}: comissão {o.commission_rate == null ? 'não informada' : pct(o.commission_rate)} ({humanize(o.commission_source)})</li>)}</ul>
+            <ul className="space-y-1 text-sm">{c.internal_offers.map((o) => <li key={o.id}>{o.institution_name} — {o.product_name}: comissão {o.commission_rate == null ? 'não informada' : pct(o.commission_rate)}{COMMISSION_SOURCE[o.commission_source] ? ` (${COMMISSION_SOURCE[o.commission_source]})` : ''}</li>)}</ul>
           </Section>
         )}
 
@@ -1359,7 +1469,9 @@ function LinkModal({ link, view, phone, settings, onClose, toast }) {
 
 function ChooseModal({ comparison, onClose, onDone }) {
   const [run, busy] = useAction();
-  const offers = comparison.view.offers.filter((o) => !o.expired);
+  // valor indicativo não pode ser escolhido (a seguradora precisa confirmar o preço antes)
+  const offers = comparison.view.offers.filter((o) => !o.expired && (!o.quote_kind || o.quote_kind === 'cotacao_valida'));
+  const blocked = comparison.view.offers.filter((o) => !o.expired && o.quote_kind && o.quote_kind !== 'cotacao_valida');
   const [offerId, setOfferId] = useState(offers[0]?.id || '');
   const offer = offers.find((o) => o.id === offerId);
   const [pay, setPay] = useState('');
@@ -1372,7 +1484,9 @@ function ChooseModal({ comparison, onClose, onDone }) {
   };
   return (
     <Modal open onClose={onClose} title="Registrar escolha do cliente" subtitle="Manifestação do cliente — não é aceitação da seguradora."
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!offerId || name.trim().length < 2 || busy} onClick={submit}>Registrar escolha</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={submit}
+        problems={[!offerId && { text: offers.length ? 'Escolha a opção.' : 'Não há opção com cotação válida para registrar.', field: 'Opção escolhida' }, name.trim().length < 2 && { text: 'Informe o nome de quem escolheu.', field: 'Nome de quem escolheu' }]}>Registrar escolha</SubmitButton></>}>
+      {blocked.length > 0 && <Notice tone="warn" className="mb-3">{blocked.map((o) => o.institution_name).join(', ')}: valor indicativo — só pode ser escolhida depois que a seguradora confirmar o preço.</Notice>}
       <div className="space-y-3">
         {offers.length < comparison.view.offers.length && <Notice tone="warn">Opções vencidas não podem ser escolhidas: recalcule a cotação.</Notice>}
         <Select label="Opção escolhida" value={offerId} onChange={(e) => setOfferId(e.target.value)}>

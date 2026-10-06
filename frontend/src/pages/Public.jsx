@@ -1,9 +1,10 @@
 // Portal do cliente por link temporário (23): sem login, sem comissão, sem dados internos.
 // Escolha do cliente ≠ aceite da seguradora; comprovante enviado = "pagamento informado" (em conferência).
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Check, AlertTriangle, Clock, Download, ExternalLink, FileUp, Loader2, Phone, ShieldCheck, Upload, X, FileText } from 'lucide-react';
-import { CentsInput, Input, Notice, StatusChip, Spinner, cx } from '../components/ui';
+import { Check, AlertTriangle, Clock, Download, ExternalLink, FileUp, Loader2, Phone, ShieldCheck, Upload, X, FileText, MessageCircle, ChevronRight } from 'lucide-react';
+import { CentsInput, Input, Notice, StatusChip, Spinner, cx, Hint, SubmitButton } from '../components/ui';
+import { TERMS, COVERAGE_TERMS } from '../lib/glossary';
 import { Mark } from '../components/Layout';
 import { apiBase, fileToPayload } from '../lib/api';
 import { money, moneyOrNA, fmt, fmtDateTime, ymd, CLASSIFICATION, INSTALLMENT_STATUS } from '../lib/format';
@@ -28,6 +29,25 @@ function usePublic(path) {
   return { ...state, reload: load };
 }
 
+/** Dica de glossário pelo código do termo. */
+const T = ({ k }) => (TERMS[k] ? <Hint label={TERMS[k][0]}>{TERMS[k][1]}</Hint> : null);
+
+/** Link de WhatsApp da corretora (telefone brasileiro sem DDI recebe 55). */
+export function waLink(phone, text) {
+  const d = String(phone || '').replace(/\D/g, '');
+  if (d.length < 10) return null;
+  const n = d.length <= 11 ? `55${d}` : d;
+  return `https://wa.me/${n}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
+}
+
+/** "Franquia normal" → "normal" (evita "franquia Franquia normal"). */
+const deductible = (c) => {
+  const t = c.deductible_text ? c.deductible_text.replace(/^franquia\s*:?\s*/i, '').trim() : '';
+  const val = c.deductible_cents != null ? money(c.deductible_cents) : '';
+  if (t && val && !t.includes(val)) return `${t} (${val})`;
+  return t || val || 'não informada';
+};
+
 function Shell({ broker, children, title }) {
   useEffect(() => { document.title = title ? `${title} — ${broker?.name || 'APOLVEN'}` : 'APOLVEN'; }, [title, broker?.name]);
   return (
@@ -39,7 +59,12 @@ function Shell({ broker, children, title }) {
             <div className="truncate text-sm font-semibold">{broker?.name || 'Sua corretora de seguros'}</div>
             <div className="text-[11px] text-ink-faint">{broker?.susep_code ? `SUSEP ${broker.susep_code} · ` : ''}Acesso seguro por link temporário</div>
           </div>
-          {broker?.phone && <a href={`tel:${broker.phone.replace(/\D/g, '')}`} className="btn-ghost ml-auto h-9 px-2.5 text-xs"><Phone className="h-4 w-4" /><span className="hidden sm:inline">{broker.phone}</span></a>}
+          {broker?.phone && (
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              {waLink(broker.phone) && <a href={waLink(broker.phone, 'Olá! Tenho uma dúvida sobre o meu seguro.')} target="_blank" rel="noopener noreferrer" className="btn-outline h-9 px-2.5 text-xs"><MessageCircle className="h-4 w-4" />WhatsApp</a>}
+              <a href={`tel:${broker.phone.replace(/\D/g, '')}`} className="btn-ghost h-9 min-w-[2.25rem] px-2.5" aria-label={`Ligar para a corretora: ${broker.phone}`}><Phone className="h-4 w-4" /><span className="hidden text-xs sm:inline">{broker.phone}</span></a>
+            </div>
+          )}
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-4 py-5 sm:py-8">{children}</main>
@@ -80,15 +105,39 @@ export function PublicComparison() {
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState(null);
   const [err, setErr] = useState(null);
+  const [active, setActive] = useState(0);
+  const railRef = useRef(null);
   if (loading) return <Loader />;
   if (error) return <ErrorScreen error={error} />;
+
+  const indicative = (o) => o.quote_kind && o.quote_kind !== 'cotacao_valida';
+  const goTo = (i) => {
+    const el = railRef.current?.children?.[i];
+    if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    setActive(i);
+  };
+  const onRailScroll = () => {
+    const rail = railRef.current;
+    if (!rail) return;
+    const cards = [...rail.children];
+    const mid = rail.scrollLeft + rail.clientWidth / 2;
+    let best = 0;
+    cards.forEach((c, i) => { if (Math.abs(c.offsetLeft + c.clientWidth / 2 - mid) < Math.abs(cards[best].offsetLeft + cards[best].clientWidth / 2 - mid)) best = i; });
+    if (best !== active) setActive(best);
+  };
 
   const chosen = v.offers.find((o) => o.id === v.chosen_offer_id);
   const closed = ['escolhido', 'cancelado', 'expirado'].includes(v.status);
   const sel = v.offers.find((o) => o.id === offerId);
-  const pick = (o) => { setOfferId(o.id); setPayId(o.payment_options?.[0]?.id || ''); setErr(null); setTimeout(() => document.getElementById('escolha')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); };
+  const pick = (o) => { setOfferId(o.id); setPayId(o.payment_options?.[0]?.id || ''); setErr(null); setName((x) => x || v.client?.name || ''); setTimeout(() => document.getElementById('escolha')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); };
+  const problems = sel ? [
+    sel.payment_options?.length > 0 && !payId && { text: 'Escolha a forma de pagamento.', field: 'Forma de pagamento' },
+    name.trim().length < 3 && { text: 'Informe seu nome completo.', field: 'Seu nome completo' },
+    !agree && { text: 'Marque a autorização para a corretora enviar a proposta.', field: '#autorizo' },
+  ].filter(Boolean) : [];
   const submit = async (e) => {
-    e.preventDefault();
+    e?.preventDefault?.();
+    if (problems.length || sending) return;
     setSending(true); setErr(null);
     try {
       const r = await pub(`/comparativo/${token}/choose`, { offer_id: offerId, payment_option: payId || null, name: name.trim(), authorize: true });
@@ -118,19 +167,42 @@ export function PublicComparison() {
           <span className="text-ink-soft">{v.min_coverages.map((m) => `${m.name}${m.required === false ? ' (desejável)' : ''}${m.min_limit_cents != null ? ` — mínimo ${money(m.min_limit_cents)}` : ''}`).join('; ')}</span></div>
       )}
 
-      <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-3 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-3">
+      {v.offers.length > 1 && (
+        <div className="mb-3 sm:hidden">
+          <p className="mb-2 text-sm font-medium">{v.offers.length} opções — toque para ver ou deslize os cartões</p>
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1" role="tablist" aria-label="Opções do comparativo">
+            {v.offers.map((o, i) => (
+              <button key={o.id} type="button" role="tab" aria-selected={active === i} onClick={() => goTo(i)}
+                className={cx('shrink-0 rounded-app-sm border px-3 py-2 text-left text-xs', active === i ? 'border-primary bg-primary/5' : 'border-line bg-surface')}>
+                <span className="block font-medium">Opção {i + 1} · {o.institution_name}</span>
+                <span className="block tabular-nums text-ink-soft">{money(o.total_premium_cents)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div ref={railRef} onScroll={onRailScroll} className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-3 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-3">
         {v.offers.map((o, i) => (
-          <OfferCard key={o.id} o={o} index={i} v={v} selected={offerId === o.id} chosen={v.chosen_offer_id === o.id} canPick={!closed && !o.expired} onPick={() => pick(o)} />
+          <OfferCard key={o.id} o={o} index={i} total={v.offers.length} v={v} selected={offerId === o.id} chosen={v.chosen_offer_id === o.id}
+            canPick={!closed && !o.expired && !indicative(o)} waiting={!closed && !o.expired && indicative(o)} broker={v.broker} onPick={() => pick(o)} />
         ))}
       </div>
+      {v.offers.length > 1 && (
+        <div className="mt-1 flex items-center justify-center gap-3 sm:hidden" aria-hidden>
+          {v.offers.map((o, i) => <span key={o.id} className={cx('h-2 rounded-full transition-all', active === i ? 'w-5 bg-primary' : 'w-2 bg-line')} />)}
+          {active < v.offers.length - 1 && <button type="button" tabIndex={-1} className="ml-1 inline-flex items-center text-xs text-primary" onClick={() => goTo(active + 1)}>próxima <ChevronRight className="h-3.5 w-3.5" /></button>}
+        </div>
+      )}
 
       {!closed && !msg && (
         <form id="escolha" onSubmit={submit} className="card mt-6 scroll-mt-4 p-4 sm:p-5">
           <h2 className="text-base font-semibold">Registrar sua escolha</h2>
-          {!sel ? <p className="mt-2 text-sm text-ink-soft">Toque em <b>“Escolher esta opção”</b> em uma das opções acima.</p> : (
+          {!sel ? (v.offers.some((o) => !o.expired && !indicative(o))
+            ? <p className="mt-2 text-sm text-ink-soft">Toque em <b>“Escolher esta opção”</b> em uma das opções acima.</p>
+            : <p className="mt-2 text-sm text-ink-soft">Ainda não há opção disponível para escolha: as seguradoras precisam confirmar os preços. A corretora vai avisar você.</p>) : (
             <div className="mt-3 space-y-4">
-              <div className="rounded-app-sm bg-muted px-3 py-2.5 text-sm"><b>{sel.institution_name}</b> — {sel.product_name} · prêmio total {money(sel.total_premium_cents)}</div>
-              {sel.quote_kind === 'valor_indicativo' && <Notice tone="warn">Esta opção tem <b>valor indicativo</b>: a seguradora ainda precisa confirmar o preço antes da contratação.</Notice>}
+              <div className="rounded-app-sm bg-muted px-3 py-2.5 text-sm"><b>{sel.institution_name}</b> — {sel.product_name} · preço total (prêmio) {money(sel.total_premium_cents)}</div>
               {sel.payment_options?.length > 0 && (
                 <fieldset>
                   <legend className="label">Forma de pagamento</legend>
@@ -146,13 +218,15 @@ export function PublicComparison() {
                   </div>
                 </fieldset>
               )}
-              <Input label="Seu nome completo" required minLength={3} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input label="Seu nome completo" minLength={3} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
               <label className="flex cursor-pointer items-start gap-3 text-sm">
-                <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-[rgb(var(--primary))]" checked={agree} onChange={(e) => setAgree(e.target.checked)} required />
+                <input id="autorizo" type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-[rgb(var(--primary))]" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
                 <span>Autorizo a corretora a enviar esta proposta à seguradora, com as coberturas, a vigência e a forma de pagamento acima. Entendo que a contratação só vale depois da aceitação da seguradora.</span>
               </label>
               {err && <Notice tone="danger">{err}</Notice>}
-              <button className="btn-primary w-full sm:w-auto" disabled={!agree || name.trim().length < 3 || sending}>{sending ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}Confirmar escolha</button>
+              <div className="flex flex-wrap items-center gap-2">
+                <SubmitButton className="btn-primary w-full sm:w-auto" busy={sending} problems={problems} onClick={() => submit()}>{sending ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4" />}Confirmar escolha</SubmitButton>
+              </div>
             </div>
           )}
         </form>
@@ -164,51 +238,54 @@ export function PublicComparison() {
   );
 }
 
-function OfferCard({ o, index, v, selected, chosen, canPick, onPick }) {
+function OfferCard({ o, index, total, v, selected, chosen, canPick, waiting, broker, onPick }) {
+  const wa = waLink(broker?.phone, `Olá! Sobre o comparativo ${v.number}: gostaria de saber quando a opção ${index + 1} (${o.institution_name}) estará confirmada.`);
   return (
-    <article className={cx('card flex w-[85vw] max-w-sm shrink-0 snap-center flex-col p-4 sm:w-auto sm:max-w-none', (selected || chosen) && 'ring-2 ring-primary', o.expired && 'opacity-70')}>
+    <article aria-label={`Opção ${index + 1} de ${total}`} className={cx('card flex w-[85vw] max-w-sm shrink-0 snap-center flex-col p-4 sm:w-auto sm:max-w-none', (selected || chosen) && 'ring-2 ring-primary', o.expired && 'opacity-70')}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">Opção {index + 1}</p>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">Opção {index + 1} de {total}</p>
           <h2 className="font-semibold">{o.institution_name}</h2>
           <p className="text-sm text-ink-soft">{o.product_name}</p>
         </div>
-        <StatusChip map={QUOTE_KIND} value={o.quote_kind} />
+        <span className="inline-flex shrink-0 items-center"><StatusChip map={QUOTE_KIND} value={o.quote_kind} /><T k={o.quote_kind === 'cotacao_valida' ? 'cotacao_valida' : 'valor_indicativo'} /></span>
       </div>
       <OfferBadges id={o.id} badges={v.badges} className="mt-2" />
       <div className="mt-3">
-        <p className="text-xs text-ink-faint">Prêmio total da vigência</p>
+        <p className="flex items-center text-xs text-ink-faint">Preço total do seguro (prêmio)<T k="premio" /></p>
         <p className="text-2xl font-semibold tabular-nums">{money(o.total_premium_cents)}</p>
-        <p className="text-xs text-ink-faint">Líquido {moneyOrNA(o.premium_net_cents)} · IOF {moneyOrNA(o.taxes_cents)}</p>
+        {o.premium_net_cents == null && o.taxes_cents == null
+          ? <p className="flex flex-wrap items-center text-xs text-ink-faint">Impostos (IOF) incluídos; detalhe não informado pela seguradora<T k="iof" /></p>
+          : <p className="flex flex-wrap items-center text-xs text-ink-faint">Sem impostos {moneyOrNA(o.premium_net_cents)}<T k="premio_liquido" /> · IOF {moneyOrNA(o.taxes_cents)}<T k="iof" /></p>}
       </div>
       <p className={cx('mt-2 flex items-center gap-1 text-xs', o.expired ? 'font-medium text-red-600' : 'text-ink-soft')}>
-        <Clock className="h-3.5 w-3.5" />{o.valid_until ? `Válida até ${fmt(o.valid_until)}` : 'Validade não informada'}{o.expired && ' — vencida'}
+        <Clock className="h-3.5 w-3.5" />{o.valid_until ? `Preço válido até ${fmt(o.valid_until)}` : 'Validade não informada'}{o.expired && ' — vencida'}<T k="validade" />
       </p>
-      {o.quote_kind === 'valor_indicativo' && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">Valor indicativo: depende de confirmação da seguradora.</p>}
+      {o.quote_kind === 'valor_indicativo' && <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">Valor indicativo: a seguradora ainda precisa confirmar o preço.</p>}
 
       <div className="mt-3 border-t border-line pt-3">
-        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">Coberturas</p>
+        <p className="mb-1.5 flex items-center text-xs font-semibold uppercase tracking-wide text-ink-faint">Coberturas<T k="cobertura" /></p>
         <ul className="space-y-1.5 text-sm">
           {(v.min_coverages || []).map((m) => {
             const c = (o.coverages || []).find((x) => x.code === m.code);
             return (
               <li key={m.code} className="flex gap-2">
-                {c ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> : <X className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />}
-                <span><span className={cx(!c && 'text-red-600')}>{m.name}</span>
-                  {c ? <span className="block text-xs text-ink-faint">Limite {c.limit_cents == null ? 'não informado' : money(c.limit_cents)} · franquia {c.deductible_text || (c.deductible_cents != null ? money(c.deductible_cents) : 'não informada')}</span>
+                {c ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-label="Incluída" /> : <X className="mt-0.5 h-4 w-4 shrink-0 text-red-500" aria-label="Não incluída" />}
+                <span><span className={cx(!c && 'text-red-600')}>{m.name}</span>{COVERAGE_TERMS[m.code] && <Hint label={m.name}>{COVERAGE_TERMS[m.code]}</Hint>}
+                  {c ? <span className="block text-xs text-ink-faint">Limite {c.limit_cents == null ? 'não informado' : money(c.limit_cents)} · Franquia: {deductible(c)}</span>
                     : <span className="block text-xs text-red-600">Não incluída</span>}</span>
               </li>
             );
           })}
           {(o.coverages || []).filter((c) => !(v.min_coverages || []).some((m) => m.code === c.code)).map((c) => (
             <li key={c.code} className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-              <span>{c.name}<span className="block text-xs text-ink-faint">Limite {c.limit_cents == null ? 'não informado' : money(c.limit_cents)}</span></span></li>
+              <span>{c.name}{COVERAGE_TERMS[c.code] && <Hint label={c.name}>{COVERAGE_TERMS[c.code]}</Hint>}<span className="block text-xs text-ink-faint">Limite {c.limit_cents == null ? 'não informado' : money(c.limit_cents)}</span></span></li>
           ))}
         </ul>
       </div>
       {o.assistances?.length > 0 && (
         <div className="mt-3 border-t border-line pt-3">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">Assistências</p>
+          <p className="mb-1 flex items-center text-xs font-semibold uppercase tracking-wide text-ink-faint">Assistências<T k="assistencia" /></p>
           <p className="text-sm">{o.assistances.map((a) => a.name || a.code).join(' · ')}</p>
         </div>
       )}
@@ -217,13 +294,20 @@ function OfferCard({ o, index, v, selected, chosen, canPick, onPick }) {
         <PaymentOptions options={o.payment_options} chosen={chosen ? v.chosen_payment_option : null} compact />
       </div>
       <div className="mt-3 border-t border-line pt-3">
-        <StatusChip map={CLASSIFICATION} value={o.classification} />
+        <span className="inline-flex items-center"><StatusChip map={CLASSIFICATION} value={o.classification} /><T k="classificacao" /></span>
         {o.issues?.length > 0 && <ul className="mt-1.5 space-y-0.5 text-xs text-ink-soft">{o.issues.map((x, i) => <li key={i} className="flex gap-1"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />{x}</li>)}</ul>}
         {(o.requirements || o.conditions) && <p className="mt-1.5 text-xs text-ink-soft">{o.requirements && <><b>Exigências:</b> {o.requirements} </>}{o.conditions && <><b>Condições:</b> {o.conditions}</>}</p>}
       </div>
       <div className="mt-auto pt-4">
         {chosen ? <span className="chip bg-primary text-primary-fg"><Check className="h-3 w-3" />Sua escolha</span>
-          : canPick && <button type="button" className={selected ? 'btn-primary w-full' : 'btn-outline w-full'} onClick={onPick}>{selected ? <><Check className="h-4 w-4" />Selecionada</> : 'Escolher esta opção'}</button>}
+          : canPick ? <button type="button" className={selected ? 'btn-primary w-full' : 'btn-outline w-full'} onClick={onPick}>{selected ? <><Check className="h-4 w-4" />Selecionada</> : 'Escolher esta opção'}</button>
+            : waiting ? (
+              <div className="rounded-app-sm border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">
+                <b className="block">Aguardando confirmação da seguradora</b>
+                Esta opção ainda não pode ser escolhida. A corretora avisa você quando o preço for confirmado.
+                {wa && <a href={wa} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 font-medium text-primary underline"><MessageCircle className="h-3.5 w-3.5" />Perguntar à corretora</a>}
+              </div>
+            ) : o.expired ? <p className="text-xs text-red-600">Preço vencido: peça à corretora valores atualizados.</p> : null}
       </div>
     </article>
   );
@@ -321,7 +405,7 @@ function ReceiptForm({ token, inst, onCancel, onDone }) {
       {err && <Notice tone="danger">{err}</Notice>}
       <p className="text-xs text-ink-faint">O envio não confirma o pagamento: ele fica em conferência até a confirmação da seguradora.</p>
       <div className="flex flex-wrap gap-2">
-        <button className="btn-primary" disabled={!file || !amount || !date || busy}>{busy ? <Spinner className="h-4 w-4" /> : <Upload className="h-4 w-4" />}Enviar comprovante</button>
+        <SubmitButton busy={busy} onClick={(e) => e.currentTarget.form?.requestSubmit()} problems={[!file && { text: 'Anexe o comprovante (PDF ou foto).' }, !amount && { text: 'Informe o valor pago.', field: 'Valor pago' }, !date && { text: 'Informe a data do pagamento.', field: 'Data do pagamento' }]}>{busy ? <Spinner className="h-4 w-4" /> : <Upload className="h-4 w-4" />}Enviar comprovante</SubmitButton>
         <button type="button" className="btn-ghost" onClick={onCancel}>Cancelar</button>
       </div>
     </form>
