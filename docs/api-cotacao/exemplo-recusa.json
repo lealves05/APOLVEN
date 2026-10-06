@@ -1,0 +1,13 @@
+{
+  "contrato": "apolven-cotacao/1",
+  "id_requisicao": "7f3c2a10-5d4e-4b8a-9c11-2f0d6b7e8a90",
+  "ofertas": [
+    {
+      "seguradora": "Seguradora Exemplo S.A.",
+      "produto": "Auto Completo",
+      "status": "recusa",
+      "numero_cotacao": "R-5521",
+      "motivo_recusa": "Região de pernoite fora da política de aceitação."
+    }
+  ]
+}

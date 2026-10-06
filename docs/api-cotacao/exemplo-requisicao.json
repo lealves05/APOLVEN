@@ -1,0 +1,67 @@
+{
+  "contrato": "apolven-cotacao/1",
+  "id_requisicao": "7f3c2a10-5d4e-4b8a-9c11-2f0d6b7e8a90",
+  "ramo": "auto",
+  "cotacao": {
+    "numero": "COT-000123",
+    "rodada": 1,
+    "cenario": "minima"
+  },
+  "vigencia": {
+    "inicio": "2026-11-01",
+    "fim": "2027-11-01"
+  },
+  "corretora": {
+    "cnpj": "12345678000195",
+    "susep": "10.2034567",
+    "codigo_na_seguradora": "ABC-1"
+  },
+  "segurado": {
+    "tipo_pessoa": "pf",
+    "nome": "Ana Beatriz Oliveira",
+    "documento": "12345678909",
+    "data_nascimento": "1988-04-12",
+    "endereco": {
+      "cep": "13025-000",
+      "cidade": "Campinas",
+      "uf": "SP"
+    }
+  },
+  "risco": {
+    "versao_questionario": "auto-1",
+    "placa": "ABC1D23",
+    "marca_modelo": "Hatch 1.0 Flex",
+    "ano_modelo": 2024,
+    "chassi": null,
+    "uso": "particular",
+    "cep_pernoite": "13025-000",
+    "cep_circulacao": null,
+    "condutor_principal": "Ana Beatriz Oliveira",
+    "idade_condutor": 38,
+    "condutores_18_25": false,
+    "classe_bonus": 5,
+    "sinistros_12m": 0,
+    "garagem": "ambos"
+  },
+  "coberturas_desejadas": [
+    {
+      "codigo": "casco",
+      "nome": "Casco (colisão, incêndio e roubo/furto)",
+      "limite_minimo_centavos": null,
+      "obrigatoria": true
+    },
+    {
+      "codigo": "rcf_dm",
+      "nome": "RCF danos materiais",
+      "limite_minimo_centavos": 10000000,
+      "obrigatoria": true
+    }
+  ],
+  "preferencias": {
+    "assistencias": [
+      "Guincho 400 km"
+    ],
+    "franquia": "normal",
+    "pagamento": "cartão em até 10x"
+  }
+}

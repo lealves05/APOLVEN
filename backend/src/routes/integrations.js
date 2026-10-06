@@ -12,6 +12,10 @@ import {
   TEMPLATES, templateBy, publicTemplate, adapterFor, hasAutomaticAdapter, CAPABILITIES, METHODS, ERROR_MESSAGES,
 } from '../lib/connectors.js';
 import { institutionFor, own } from '../lib/common.js';
+import { hit } from '../security.js';
+import { validateApiUrl, resolvePublic, safeHeaderName, SafeHttpError } from '../lib/safeHttp.js';
+import { CONTRACT, PATHS, AUTH_TYPES, REQUEST_SCHEMA, RESPONSE_SCHEMA, STATUS_SCHEMA, EXAMPLES } from '../lib/quoteApi.js';
+import { MAX_RESPONSE } from '../lib/apolvenApiAdapter.js';
 
 const r = Router();
 const EVT = async (db, req, connectionId, kind, summary, data = null) => db.query(
@@ -104,6 +108,7 @@ export function nextStep(c, t) {
   }
   if (c.accreditation !== 'sim') return 'Falta confirmar seu credenciamento para este produto.';
   if (c.pending_requirements > 0) return `Há ${c.pending_requirements} requisito(s) obrigatório(s) pendente(s) no checklist.`;
+  if (t.api_config && (!c.api_config || !c.credential)) return 'Configure a API de cotação (endereço, autenticação e credenciais) na etapa 3.';
   if (!c.credential) return 'Cadastre os dados de acesso indicados para continuar.';
   if (c.technical_state === 'erro') return 'O último teste falhou. Confira ambiente, validade e credenciais e teste de novo.';
   if (!c.last_test_at) return 'Execute "Testar conexão".';
@@ -343,11 +348,117 @@ r.put('/connections/:id/credentials', need('credentials_manage'), async (req, re
   res.json(out);
 });
 
+// ---------------- API de cotação — padrão APOLVEN ----------------
+const RATE_TESTS = 10; // testes de conexão por minuto por corretora
+
+/** Contrato público (JSON Schema e exemplos) para seguradoras, parceiros de multicálculo e middlewares. */
+r.get('/api-contract', need('integrations_view'), (req, res) => {
+  res.json({
+    contract: CONTRACT, paths: PATHS, auth_types: AUTH_TYPES,
+    request_schema: REQUEST_SCHEMA, response_schema: RESPONSE_SCHEMA, status_schema: STATUS_SCHEMA, examples: EXAMPLES,
+    limits: { timeout_ms_max: 30000, response_max_bytes: MAX_RESPONSE, rate_per_minute: Math.max(1, Number(process.env.APOLVEN_QUOTE_API_RATE) || 120), retries: 2 },
+  });
+});
+
+/** Confere endereço (https, sem IP/rede interna) — no cadastro também resolve o DNS e confere todos os IPs. */
+async function checkApiUrl(value, label) {
+  try {
+    const v = validateApiUrl(value, { label });
+    await resolvePublic(v.host, { local: v.local });
+    return v.url.toString().replace(/\/+$/, '');
+  } catch (e) {
+    if (e instanceof SafeHttpError) throw new HttpError(400, e.message, { code: e.code });
+    throw e;
+  }
+}
+
+const SECRET_KEYS = { bearer: ['token'], api_key: ['api_key'], oauth2_cc: ['client_id', 'client_secret'] };
+
+/**
+ * Etapa 3 (API padrão APOLVEN) — endereço, autenticação, tempo e credenciais. Mesmas exigências das credenciais:
+ * MFA ativo + reautenticação; segredos cifrados no cofre (nunca voltam ao navegador); auditado sem conteúdo secreto.
+ */
+r.put('/connections/:id/api-config', need('credentials_manage'), async (req, res) => {
+  const body = parse(z.object({
+    base_url: z.string().trim().min(8).max(500),
+    auth_type: z.enum(['bearer', 'api_key', 'oauth2_cc']),
+    header_name: z.string().trim().max(64).nullable().optional(),
+    token_url: z.string().trim().max(500).nullable().optional(),
+    scope: z.string().trim().max(300).nullable().optional(),
+    timeout_ms: z.number().int().min(2000).max(30000).default(15000),
+    secrets: z.object({ token: z.string().max(8000).optional(), api_key: z.string().max(8000).optional(), client_id: z.string().max(500).optional(), client_secret: z.string().max(8000).optional() }).strict().default({}),
+    keep_secrets: z.boolean().default(false),
+    owner: z.enum(['corretora', 'filial', 'produtor', 'parceiro']).default('corretora'),
+    expires_at: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    mfa_code: z.string().optional(), password: z.string().optional(),
+  }), req.body);
+  const u = await one('select mfa_enabled from users where id = $1', [req.user.id]);
+  if (!u.mfa_enabled && !req.isDemo) throw new HttpError(403, 'Ative a verificação em duas etapas para administrar credenciais.', { code: 'MFA_REQUIRED' });
+  await reauth(req, { code: body.mfa_code, password: body.password });
+  const c = await loadConnection(req, req.params.id);
+  if (c.revoked_at) throw conflict('Conexão revogada.');
+  const t = templateBy(c.template_code);
+  if (!t?.api_config) throw new HttpError(400, 'Esta conexão não usa API de cotação no padrão APOLVEN.');
+  const cfg = { base_url: await checkApiUrl(body.base_url, 'Endereço da API'), auth_type: body.auth_type, timeout_ms: body.timeout_ms, contract: CONTRACT };
+  if (body.auth_type === 'api_key') {
+    cfg.header_name = safeHeaderName(body.header_name || 'X-API-Key');
+    if (!cfg.header_name) throw new HttpError(400, 'Nome do cabeçalho inválido (use letras, números e hífen; cabeçalhos de protocolo não são permitidos).');
+  }
+  if (body.auth_type === 'oauth2_cc') {
+    if (!body.token_url) throw new HttpError(400, 'Informe o endereço do token (OAuth2).');
+    cfg.token_url = await checkApiUrl(body.token_url, 'Endereço do token');
+    if (body.scope) {
+      if (!/^[\x21\x23-\x5B\x5D-\x7E ]{1,300}$/.test(body.scope)) throw new HttpError(400, 'Escopo inválido.');
+      cfg.scope = body.scope;
+    }
+  }
+  // segredos: novos, ou mantidos da versão atual quando o tipo de autenticação não mudou
+  let secrets = {};
+  const need2 = SECRET_KEYS[body.auth_type];
+  if (body.keep_secrets && !need2.some((k) => String(body.secrets[k] || '').trim())) {
+    const cur = await one('select sealed from credential_versions where company_id = $1 and connection_id = $2 and revoked_at is null order by version desc limit 1', [req.companyId, c.id]);
+    const old = cur ? unseal(cur.sealed, `cred:${req.companyId}`) : {};
+    if (old.auth_type !== body.auth_type) throw new HttpError(400, 'O tipo de autenticação mudou: informe as novas credenciais.', { code: 'CREDENTIAL_MISSING' });
+    secrets = Object.fromEntries(need2.map((k) => [k, old[k]]));
+  } else {
+    for (const k of need2) secrets[k] = String(body.secrets[k] || '').trim();
+  }
+  const missing = need2.filter((k) => !secrets[k]);
+  if (missing.length) throw new HttpError(400, `${ERROR_MESSAGES.CREDENTIAL_MISSING[0]} (${missing.map((k) => ({ token: 'token', api_key: 'chave de API', client_id: 'client ID', client_secret: 'client secret' })[k]).join(', ')})`, { code: 'CREDENTIAL_MISSING' });
+  if (Object.values(secrets).some((v) => /[\r\n]/.test(v))) throw new HttpError(400, 'Credencial com quebra de linha não é aceita.');
+  const host = new URL(cfg.base_url).host;
+  const publicInfo = { autenticacao: AUTH_TYPES[body.auth_type], servidor: host, ...(secrets.client_id ? { client_id: mask(secrets.client_id) } : {}) };
+  const out = await tx(async (db) => {
+    await db.query('select id from provider_connections where id = $1 for update', [c.id]);
+    const { rows: [v] } = await db.query('select coalesce(max(version),0)+1 as n from credential_versions where company_id = $1 and connection_id = $2', [req.companyId, c.id]);
+    await db.query(`update credential_versions set revoked_at = now(), revoked_reason = 'substituída por nova configuração da API' where company_id = $1 and connection_id = $2 and revoked_at is null`, [req.companyId, c.id]);
+    const { rows: [cv] } = await db.query(`insert into credential_versions (company_id, connection_id, version, sealed, public_info, owner, environment, expires_at, created_by)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id, version, public_info, owner, environment, expires_at, created_at`,
+    [req.companyId, c.id, v.n, seal({ auth_type: body.auth_type, ...secrets }, `cred:${req.companyId}`), publicInfo, body.owner, c.environment, body.expires_at || null, req.user.id]);
+    await db.query(`update capability_validations set state = case when state = 'indisponivel' then state else 'pendente' end, reason = 'Configuração da API alterada: teste novamente',
+        validated_at = null, activated_at = null, credential_version_id = null, updated_at = now() where company_id = $1 and connection_id = $2`, [req.companyId, c.id]);
+    await db.query(`update provider_connections set api_config = $3, technical_state = 'nao_configurado', step = greatest(step, 4), updated_at = now(), version = version + 1 where id = $1 and company_id = $2`,
+      [c.id, req.companyId, cfg]);
+    await db.query(`update quote_tasks set status = 'autorizacao_expirada', reason = 'Configuração da API alterada: execute de novo', updated_at = now()
+       where company_id = $1 and connection_id = $2 and status = 'aguardando'`, [req.companyId, c.id]);
+    await EVT(db, req, c.id, 'credencial', `API de cotação configurada: ${host} · ${AUTH_TYPES[body.auth_type]} · tempo máximo ${Math.round(body.timeout_ms / 1000)} s (credencial versão ${cv.version})`);
+    await audit(db, req, { entity: 'provider_connection', entityId: c.id, action: 'integration.api_config',
+      summary: `API de cotação de ${c.institution_name} configurada (${host}, ${AUTH_TYPES[body.auth_type]}) — conteúdo das credenciais não registrado`,
+      data: { servidor: host, autenticacao: body.auth_type, tempo_ms: body.timeout_ms } });
+    return cv;
+  });
+  res.json({ api_config: cfg, credential: out });
+});
+
 /** Etapa 4 — Testar conexão (C.8): somente operações seguras; nunca transmite, cobra, cancela ou abre sinistro (A40). */
 r.post('/connections/:id/connection-tests', need('integrations_manage'), async (req, res) => {
   const c = await loadConnection(req, req.params.id);
   const t = templateBy(c.template_code);
   const correlation = crypto.randomUUID();
+  if (t?.api_config) {
+    const lim = await hit(`apitest:${req.companyId}`, RATE_TESTS, 60);
+    if (lim.blocked) throw new HttpError(429, `Muitos testes de conexão seguidos. Aguarde ${lim.retryAfter} s.`, { code: 'RATE_LIMITED' });
+  }
   const started = Date.now();
   const reqs = (await q('select * from integration_requirements where company_id = $1 and connection_id = $2', [req.companyId, c.id])).rows;
   const results = {
@@ -357,6 +468,7 @@ r.post('/connections/:id/connection-tests', need('integrations_manage'), async (
   let code = null;
   let status = 'concluido';
   const adapter = adapterFor(t);
+  let out = null;
   const cred = await one(`select id, sealed, version from credential_versions where company_id = $1 and connection_id = $2 and revoked_at is null order by version desc limit 1`, [req.companyId, c.id]);
   if (!hasAutomaticAdapter(t)) {
     code = 'CONNECTOR_NOT_AVAILABLE';
@@ -364,15 +476,16 @@ r.post('/connections/:id/connection-tests', need('integrations_manage'), async (
   } else if (!cred) {
     code = 'CREDENTIAL_MISSING';
   } else {
-    let out;
     try {
       out = await Promise.race([
         adapter.testConnection({ credentials: unseal(cred.sealed, `cred:${req.companyId}`), connection: c, environment: c.environment }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 15000)),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), Math.max(15000, (Number(c.api_config?.timeout_ms) || 0) + 8000))),
       ]);
     } catch { out = { auth: 'indisponivel', code: 'PROVIDER_TEMPORARILY_UNAVAILABLE' }; }
     results.autenticacao = out.auth || 'nao_verificada';
     code = out.code || null;
+    if (out.detail) results.limitacoes.push(out.detail);
+    if (out.exchange) results.http = { status: out.exchange.http_status ?? null, duracao_ms: out.exchange.duration_ms ?? null };
     if (out.auth === 'valida') {
       if (out.broker_code == null) results.vinculo = 'nao_consultavel';
       else if (c.broker_code && out.broker_code !== c.broker_code) { results.vinculo = 'divergente'; code = 'BROKER_IDENTITY_MISMATCH'; }
@@ -407,6 +520,24 @@ r.post('/connections/:id/connection-tests', need('integrations_manage'), async (
     } else if (cred) {
       await db.query(`update capability_validations set state = case when state = 'indisponivel' then state else 'pendente' end, reason = $3, updated_at = now() where company_id = $1 and connection_id = $2`,
         [req.companyId, c.id, ERROR_MESSAGES[code]?.[0] || 'Falha no teste']);
+    }
+    // API padrão APOLVEN: teste aprovado ativa a cotação automática (se nada mais bloquear) — é o que a corretora configurou
+    if (authOk && t.self_service && results.capacidades.cotacao === 'autorizada' && results.vinculo !== 'divergente') {
+      const blockers = await activationBlockers(db, req, c, 'cotacao');
+      if (!blockers.length) {
+        await db.query(`update capability_validations set state = 'ativa', activated_by = $3, activated_at = now(), updated_at = now() where company_id = $1 and connection_id = $2 and capability = 'cotacao'`,
+          [req.companyId, c.id, req.user.id]);
+        await EVT(db, req, c.id, 'ativacao', `Cotação automática ativada após teste da API aprovado (${c.environment === 'producao' ? 'produção' : 'somente testes: não entra no multicálculo real'})`);
+        x.auto_activated = true;
+      } else x.activation_blockers = blockers;
+    }
+    if (t?.api_config && c.api_config?.base_url) {
+      let host = 'desconhecido';
+      try { host = new URL(c.api_config.base_url).host; } catch { /* configuração antiga */ }
+      await db.query(`insert into quote_api_calls (company_id, connection_id, institution_id, kind, host, http_status, outcome, error, duration_ms, response_raw, response_bytes, created_by)
+         values ($1,$2,$3,'teste',$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [req.companyId, c.id, c.institution_id, host, out?.exchange?.http_status ?? null, results.autenticacao, out?.detail ? String(out.detail).slice(0, 500) : null,
+        duration, out?.exchange?.response_raw ? JSON.stringify(out.exchange.response_raw) : null, out?.exchange?.response_bytes ?? null, req.user.id]);
     }
     await EVT(db, req, c.id, 'teste', `Teste de conexão: autenticação ${results.autenticacao}, vínculo ${results.vinculo}${code ? ` (${code})` : ''}`, { correlation });
     return x;
@@ -449,7 +580,8 @@ export async function activationBlockers(db, req, c, cap) {
   if (c.paused) out.push('integração pausada');
   if (!hasAutomaticAdapter(t)) out.push(ERROR_MESSAGES.CONNECTOR_NOT_AVAILABLE[0]);
   if (c.accreditation !== 'sim') out.push(ERROR_MESSAGES.ACCREDITATION_PENDING[0]);
-  if (c.commercial_state !== 'aprovado') out.push('aprovação comercial não confirmada');
+  // API no padrão APOLVEN: a própria corretora configura e testa a API da seguradora; basta o credenciamento confirmado
+  if (!t?.self_service && c.commercial_state !== 'aprovado') out.push('aprovação comercial não confirmada');
   const { rows: reqs } = await run(`select label from integration_requirements where company_id = $1 and connection_id = $2 and required and status <> 'confirmado' and $3 = any(blocks)`, [req.companyId, c.id, cap]);
   if (reqs.length) out.push(`requisitos pendentes: ${reqs.map((x) => x.label).join(', ')}`);
   const { rows: [v] } = await run('select * from capability_validations where company_id = $1 and connection_id = $2 and capability = $3', [req.companyId, c.id, cap]);

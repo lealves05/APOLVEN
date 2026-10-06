@@ -1,0 +1,325 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apolven.app/schemas/apolven-cotacao-1/resposta.json",
+  "title": "APOLVEN — resposta de cotação (HTTP 200)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contrato",
+    "id_requisicao",
+    "ofertas"
+  ],
+  "properties": {
+    "contrato": {
+      "const": "apolven-cotacao/1"
+    },
+    "id_requisicao": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "O mesmo id recebido."
+    },
+    "ofertas": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "seguradora",
+          "produto",
+          "status"
+        ],
+        "properties": {
+          "seguradora": {
+            "type": "string",
+            "maxLength": 160,
+            "description": "Nome da seguradora que emite a oferta."
+          },
+          "produto": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "numero_cotacao": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 120,
+            "description": "Número/protocolo da cotação na seguradora (obrigatório para status \"valida\")."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "valida",
+              "indicativa",
+              "recusa"
+            ],
+            "description": "valida = cotação firme; indicativa = valor a confirmar; recusa = a seguradora não aceita o risco (informe motivo_recusa)."
+          },
+          "motivo_recusa": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500
+          },
+          "validade": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Último dia de validade (obrigatório para \"valida\")."
+          },
+          "premio": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "total_centavos"
+            ],
+            "properties": {
+              "total_centavos": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000000000
+              },
+              "liquido_centavos": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1000000000000
+              },
+              "iof_centavos": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1000000000000
+              }
+            }
+          },
+          "coberturas": {
+            "type": "array",
+            "maxItems": 60,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "codigo",
+                "nome"
+              ],
+              "properties": {
+                "codigo": {
+                  "type": "string",
+                  "maxLength": 60,
+                  "description": "Use os códigos de \"coberturas_desejadas\" quando equivalentes."
+                },
+                "nome": {
+                  "type": "string",
+                  "maxLength": 160
+                },
+                "limite_centavos": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1000000000000
+                },
+                "franquia_centavos": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1000000000000
+                },
+                "franquia_descricao": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 300
+                }
+              }
+            }
+          },
+          "franquias": {
+            "type": "array",
+            "maxItems": 60,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "descricao"
+              ],
+              "properties": {
+                "cobertura": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 60
+                },
+                "descricao": {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                "valor_centavos": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1000000000000
+                }
+              }
+            }
+          },
+          "assistencias": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "nome"
+              ],
+              "properties": {
+                "codigo": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 60
+                },
+                "nome": {
+                  "type": "string",
+                  "maxLength": 160
+                }
+              }
+            }
+          },
+          "formas_pagamento": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "meio",
+                "parcelas",
+                "total_centavos"
+              ],
+              "properties": {
+                "id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 30
+                },
+                "meio": {
+                  "type": "string",
+                  "enum": [
+                    "boleto",
+                    "cartao",
+                    "debito",
+                    "pix",
+                    "carne",
+                    "outro"
+                  ]
+                },
+                "parcelas": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 24
+                },
+                "valor_primeira_centavos": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1000000000000
+                },
+                "valor_parcela_centavos": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1000000000000
+                },
+                "total_centavos": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000000000000
+                }
+              }
+            }
+          },
+          "observacoes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1000
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "recusa"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "motivo_recusa"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "valida",
+                    "indicativa"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "premio"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "valida"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "numero_cotacao",
+                "validade"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

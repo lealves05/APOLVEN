@@ -15,6 +15,11 @@ import { hasConsent } from './clients.js';
 import { scoreOffers, coverageSummary, TASK_STATUS, TASK_PENDING } from '../lib/compare.js';
 import { templateBy, adapterFor, hasAutomaticAdapter } from '../lib/connectors.js';
 import { activationBlockers } from './integrations.js';
+import { hit } from '../security.js';
+
+/** Limite de consultas a APIs de cotação por corretora (por minuto), para não sobrecarregar seguradoras/parceiros. */
+const API_RATE = () => Math.max(1, Number(globalThis.process?.env?.APOLVEN_QUOTE_API_RATE) || 120);
+const apiHost = (cfg) => { try { return new URL(cfg?.base_url).host; } catch { return 'desconhecido'; } };
 
 const r = Router();
 
@@ -181,49 +186,96 @@ r.post('/:id/rounds/:rid/run', need('quotes_manage'), async (req, res) => {
   if (round.status === 'cancelada') return res.json(await roundView(req, round));
   const { rows: tasks } = await q(`update quote_tasks set status = 'executando', lease_until = now() + interval '60 seconds', started_at = coalesce(started_at, now()), attempts = attempts + 1, updated_at = now()
       where id in (select id from quote_tasks where company_id = $1 and round_id = $2 and mode = 'automatica'
-                   and (status = 'aguardando' or (status = 'executando' and lease_until < now()) or (status = 'fonte_indisponivel' and attempts < 3)) limit 8 for update skip locked)
+                   and (status = 'aguardando' or (status = 'executando' and lease_until < now())
+                     or (status = 'fonte_indisponivel' and attempts < 3 and updated_at < now() - make_interval(secs => 3 * attempts))) limit 8 for update skip locked)
       returning *`, [req.companyId, round.id]);
   const consentOk = !(await one(`select 1 from consents where company_id = $1 and client_id = $2 and purpose = 'cotacao' and revoked_at is not null and revoked_at > $3
      and not exists (select 1 from consents c2 where c2.company_id = $1 and c2.client_id = $2 and c2.purpose = 'cotacao' and c2.revoked_at is null and c2.granted_at > consents.revoked_at)`,
   [req.companyId, qr.client_id, round.created_at]));
+  // dados mínimos para as APIs no padrão APOLVEN (carregados uma vez por execução)
+  let quoteContext = null;
+  const contextFor = async () => {
+    if (quoteContext) return quoteContext;
+    const [client, company] = await Promise.all([
+      one('select kind, name, document, birth_date, address from clients where id = $1 and company_id = $2', [qr.client_id, req.companyId]),
+      one('select document, susep_code from companies where id = $1', [req.companyId]),
+    ]);
+    quoteContext = { client, company, request: { ...qr, number_label: docNumber(req.settings, 'quote', qr.number) }, today: today(req.settings.timezone) };
+    return quoteContext;
+  };
   await Promise.all(tasks.map(async (t) => {
     const finish = (status, reason = null, extra = {}) => q(`update quote_tasks set status = $3, reason = $4, finished_at = case when $3 = any($5) then now() else finished_at end, lease_until = null, protocol = coalesce($6, protocol), updated_at = now()
         where id = $1 and company_id = $2`, [t.id, req.companyId, status, reason, ['cotacao_valida', 'valor_indicativo', 'recusa_informada', 'analise_subscricao', 'dados_insuficientes', 'incompativel'], extra.protocol || null]);
     if (!consentOk) return finish('autorizacao_expirada', 'Autorização do cliente revogada antes da execução: nenhum dado foi compartilhado');
-    const c = await one('select * from provider_connections where id = $1 and company_id = $2', [t.connection_id, req.companyId]);
+    const c = await one('select pc.*, i.name as institution_name from provider_connections pc join institutions i on i.id = pc.institution_id where pc.id = $1 and pc.company_id = $2', [t.connection_id, req.companyId]);
     const tpl = templateBy(c?.template_code);
     const blockers = c ? await activationBlockers(null, req, c, 'cotacao') : ['conexão removida'];
     if (blockers.length || !hasAutomaticAdapter(tpl) || c.environment !== 'producao') return finish('autorizacao_expirada', `Fonte não autorizada no momento da execução: ${blockers.join('; ') || 'ambiente sem produção'}`);
     const cred = await one('select sealed from credential_versions where company_id = $1 and connection_id = $2 and revoked_at is null order by version desc limit 1', [req.companyId, c.id]);
     if (!cred) return finish('autorizacao_expirada', 'Credencial ausente ou revogada');
+    if (tpl.api_config) {
+      if (!c.api_config?.base_url) return finish('autorizacao_expirada', 'API de cotação sem configuração: configure e teste a conexão');
+      // limite por corretora: a tarefa volta para a fila sem contar tentativa
+      const lim = await hit(`quoteapi:${req.companyId}`, API_RATE(), 60);
+      if (lim.blocked) {
+        await q(`update quote_tasks set status = 'aguardando', attempts = greatest(attempts - 1, 0), lease_until = null, reason = $3, updated_at = now() where id = $1 and company_id = $2`,
+          [t.id, req.companyId, `Limite de consultas por minuto da corretora atingido: nova tentativa automática em ${lim.retryAfter}s`]);
+        return null;
+      }
+    }
     let out;
+    const ctx = tpl.api_config ? await contextFor() : null;
+    const limitMs = Math.max(20000, (Number(c.api_config?.timeout_ms) || 0) + 8000);
     try {
       const { unseal } = await import('../secretbox.js');
       out = await Promise.race([
-        adapterFor(tpl).quote({ round, task: t, connection: c, credentials: unseal(cred.sealed, `cred:${req.companyId}`) }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000)),
+        adapterFor(tpl).quote({ round, task: t, connection: c, credentials: unseal(cred.sealed, `cred:${req.companyId}`), quoteContext: ctx }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), limitMs)),
       ]);
     } catch (e) {
       // timeout depois do envio: não sabemos o que o fornecedor processou
       return finish(e.message === 'timeout' ? 'tempo_excedido' : 'indeterminado', e.message === 'timeout' ? 'Sem resposta dentro do tempo: pesquisa parcial' : 'Falha técnica: consultar antes de repetir');
     }
+    // trilha da chamada à API: quais dados foram para qual seguradora, resposta original e resultado (LGPD / auditoria)
+    let callId = null;
+    if (out?.exchange && tpl.api_config) {
+      const ex = out.exchange;
+      callId = (await one(`insert into quote_api_calls (company_id, connection_id, institution_id, round_id, task_id, kind, host, attempt, http_status, outcome, error, duration_ms,
+          fields_sent, sharing_basis, request_hash, response_raw, response_bytes, created_by)
+        values ($1,$2,$3,$4,$5,'cotacao',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) returning id`,
+      [req.companyId, c.id, t.institution_id, round.id, t.id, apiHost(c.api_config), t.attempts, ex.http_status ?? null, ex.outcome || out.status || 'indeterminado',
+        ex.error ? String(ex.error).slice(0, 500) : null, ex.duration_ms ?? null, ex.fields_sent || [], round.preferences?.sharing_basis || null, ex.request_hash || null,
+        ex.response_raw ? JSON.stringify(ex.response_raw) : null, ex.response_bytes ?? null, req.user.id]))?.id;
+      await audit(null, req, { entity: 'quote_task', entityId: t.id, action: 'quote.api_send',
+        summary: `Dados da cotação ${qr.number} enviados a ${c.institution_name} via API (${apiHost(c.api_config)}): ${(ex.fields_sent || []).join(', ') || 'nenhum dado pessoal'} — resultado: ${ex.outcome || out.status}`,
+        data: { destino: apiHost(c.api_config), campos: ex.fields_sent || [], resultado: ex.outcome || out.status, base: round.preferences?.sharing_basis || null } });
+    }
     if (!out?.ok) {
       if (out?.code === 'UNSUPPORTED_CAPABILITY') return finish('pendente_assistida', 'Conector não suporta cotação para este produto: consulta assistida');
       return finish(out?.status || 'fonte_indisponivel', out?.reason || 'Falha técnica — não é recusa da seguradora');
     }
+    const offers = out.offers || (out.offer ? [out.offer] : []);
+    if (!offers.length) {
+      // recusa expressa da seguradora (motivo e protocolo vindos da própria resposta)
+      return finish('recusa_informada', out.refusal?.reason || 'Recusa informada pela seguradora', { protocol: out.refusal?.protocol || null });
+    }
     await tx(async (db) => {
       // resultado tardio de rodada cancelada continua preso a ela e não vira oferta ativa em outra rodada
       const { rows: [cur] } = await db.query('select status from quote_rounds where id = $1', [round.id]);
-      const o = out.offer;
-      await db.query(`insert into quote_offers (company_id, round_id, task_id, institution_id, connection_id, product_name, scenario, origin, quote_kind, external_id, valid_until,
-          premium_net_cents, taxes_cents, total_premium_cents, fields_definition, coverages, assistances, payment_options, commission_source, status)
-        values ($1,$2,$3,$4,$5,$6,$7,'api',$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
-      [req.companyId, round.id, t.id, t.institution_id, c.id, o.product_name, t.scenario, o.quote_kind, o.external_id, o.valid_until || addDays(today(), 7),
-        o.premium_net_cents ?? null, o.taxes_cents ?? null, o.total_premium_cents, o.fields_definition || null, JSON.stringify(o.coverages || []),
-        JSON.stringify(o.assistances || []), JSON.stringify(o.payment_options || []), o.commission_source || 'nao_informada', cur.status === 'cancelada' ? 'retirada' : 'ativa']);
-      await db.query(`update quote_tasks set status = $3, finished_at = now(), lease_until = null, protocol = $4, updated_at = now() where id = $1 and company_id = $2`, [t.id, req.companyId, out.status, o.external_id]);
-      await emit(db, req.companyId, 'ProviderQuoteReceived', 'quote_task', t.id, { round: round.id, institution: t.institution_id });
+      for (const o of offers) {
+        await db.query(`insert into quote_offers (company_id, round_id, task_id, institution_id, connection_id, product_name, scenario, origin, quote_kind, external_id, valid_until,
+            premium_net_cents, taxes_cents, total_premium_cents, fields_definition, coverages, assistances, payment_options, commission_source, status, notes, api_call_id)
+          values ($1,$2,$3,$4,$5,$6,$7,'api',$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+        [req.companyId, round.id, t.id, t.institution_id, c.id, o.product_name, t.scenario, o.quote_kind, o.external_id, o.valid_until || (tpl.api_config ? null : addDays(today(), 7)),
+          o.premium_net_cents ?? null, o.taxes_cents ?? null, o.total_premium_cents, o.fields_definition || null, JSON.stringify(o.coverages || []),
+          JSON.stringify(o.assistances || []), JSON.stringify(o.payment_options || []), o.commission_source || 'nao_informada', cur.status === 'cancelada' ? 'retirada' : 'ativa', o.notes || null, callId]);
+      }
+      const protocol = offers.map((o) => o.external_id).filter(Boolean).join(', ').slice(0, 120) || null;
+      await db.query(`update quote_tasks set status = $3, reason = $5, finished_at = now(), lease_until = null, protocol = $4, updated_at = now() where id = $1 and company_id = $2`,
+        [t.id, req.companyId, out.status, protocol, tpl.api_config ? `${offers.length} oferta(s) recebida(s) pela API` : null]);
+      await emit(db, req.companyId, 'ProviderQuoteReceived', 'quote_task', t.id, { round: round.id, institution: t.institution_id, origin: 'api', offers: offers.length });
     });
+    return null;
   }));
   await refreshRoundStatus(req.companyId, round.id);
   res.json(await roundView(req, await one('select * from quote_rounds where id = $1', [round.id])));
@@ -236,6 +288,17 @@ async function refreshRoundStatus(companyId, roundId) {
   if (r2) await q(`update quote_requests set status = case when status = 'cancelada' then status when $3 = 'concluida' then 'concluida' else 'parcial' end, updated_at = now() where id = $1 and company_id = $2`, [r2.request_id, companyId, r2.status]);
   if (r2?.status === 'concluida') await emit(null, companyId, 'QuoteRoundCompleted', 'quote_round', roundId, null);
 }
+
+/** Trilha das chamadas à API de uma tarefa: dados enviados (caminhos), resposta original e resultado. Só para a equipe. */
+r.get('/tasks/:tid/api-calls', need('quotes_manage'), async (req, res) => {
+  const t = await own('quote_tasks', req.params.tid, req.companyId);
+  const round = await own('quote_rounds', t.round_id, req.companyId);
+  await loadRequest(req, round.request_id);
+  const { rows } = await q(`select a.id, a.kind, a.host, a.attempt, a.http_status, a.outcome, a.error, a.duration_ms, a.fields_sent, a.sharing_basis, a.request_hash,
+      a.response_raw, a.response_bytes, a.created_at, i.name as institution_name
+    from quote_api_calls a left join institutions i on i.id = a.institution_id where a.company_id = $1 and a.task_id = $2 order by a.created_at`, [req.companyId, t.id]);
+  res.json(rows);
+});
 
 // ---------------- Tarefas assistidas e ofertas ----------------
 const MANUAL_STATUS = ['pendente_assistida', 'analise_subscricao', 'recusa_informada', 'dados_insuficientes', 'fonte_indisponivel', 'tempo_excedido', 'incompativel', 'cancelada'];

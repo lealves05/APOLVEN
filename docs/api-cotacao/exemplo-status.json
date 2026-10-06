@@ -1,0 +1,10 @@
+{
+  "contrato": "apolven-cotacao/1",
+  "status": "ok",
+  "seguradora": "Seguradora Exemplo S.A.",
+  "ambiente": "producao",
+  "ramos": [
+    "auto",
+    "residencial"
+  ]
+}

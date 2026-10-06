@@ -91,6 +91,18 @@ _(routes/company.js)_
 | PUT | `/api/v1/company/users/:id` | users |
 | POST | `/api/v1/company/users/:id/reset-mfa` | users |
 | GET | `/api/v1/company/permissions` |  |
+| GET | `/api/v1/company/logo` |  |
+| PUT | `/api/v1/company/logo` | settings |
+| DELETE | `/api/v1/company/logo` | settings |
+
+## /api/v1/print-templates  
+_(routes/printTemplates.js)_ — modelo de impressão da apólice (JSON do editor, validado em `lib/printTemplate.js`)
+
+| Método | Caminho | Permissão |
+|---|---|---|
+| GET | `/api/v1/print-templates/policy?branch=&exact=1` | policies_view |
+| PUT | `/api/v1/print-templates/policy` | settings |
+| DELETE | `/api/v1/print-templates/policy?branch=` | settings |
 
 ## /api/v1/clients  
 _(routes/clients.js)_
@@ -177,6 +189,14 @@ _(routes/integrations.js)_
 | POST | `/api/v1/integrations/connections/:id/revoke` | credentials_manage |
 | GET | `/api/v1/integrations/pendencias` | integrations_view |
 | GET | `/api/v1/integrations/history` | integrations_view |
+| GET | `/api/v1/integrations/api-contract` | integrations_view |
+| PUT | `/api/v1/integrations/connections/:id/api-config` | credentials_manage (+ MFA/reautenticação) |
+
+API de cotação "padrão APOLVEN" (`apolven-cotacao/1`): o APOLVEN chama `GET {base}/v1/status` (teste) e `POST {base}/v1/cotacoes`
+(cotação). JSON Schemas e exemplos em `docs/api-cotacao/` (gerados por `node scripts/api-contract.mjs`). Endereços informados pela
+corretora passam pela proteção contra SSRF de `lib/safeHttp.js` (https, IP público conferido no cadastro e em cada chamada, conexão no
+IP conferido, sem redirecionamento, resposta até 512 KB). `APOLVEN_ALLOW_LOCAL_API=1` libera somente localhost, para desenvolvimento
+e testes (`node scripts/fake-insurer.mjs`); nunca use em produção. `APOLVEN_QUOTE_API_RATE` = consultas por minuto por corretora (padrão 120).
 
 ## /api/v1/quote-requests  
 _(routes/quotes.js)_
@@ -192,6 +212,7 @@ _(routes/quotes.js)_
 | PUT | `/api/v1/quote-requests/tasks/:tid` | quotes_manage |
 | POST | `/api/v1/quote-requests/tasks/:tid/offers` | quotes_manage |
 | POST | `/api/v1/quote-requests/offers/:oid/withdraw` | quotes_manage |
+| GET | `/api/v1/quote-requests/tasks/:tid/api-calls` | quotes_manage |
 
 ## /api/v1/comparisons  
 _(routes/quotes.js)_
@@ -228,6 +249,7 @@ _(routes/policies.js)_
 | GET | `/api/v1/policies` | policies_view |
 | POST | `/api/v1/policies` | policies_manage |
 | GET | `/api/v1/policies/:id` | policies_view |
+| GET | `/api/v1/policies/:id/print-data` | policies_view |
 | PUT | `/api/v1/policies/:id` | policies_manage |
 | POST | `/api/v1/policies/:id/verify` | policies_verify |
 | POST | `/api/v1/policies/:id/status` | policies_manage |

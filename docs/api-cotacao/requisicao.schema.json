@@ -1,0 +1,283 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apolven.app/schemas/apolven-cotacao-1/requisicao.json",
+  "title": "APOLVEN — requisição de cotação (POST {base}/v1/cotacoes)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contrato",
+    "id_requisicao",
+    "ramo",
+    "cotacao",
+    "corretora",
+    "segurado",
+    "risco",
+    "coberturas_desejadas"
+  ],
+  "properties": {
+    "contrato": {
+      "const": "apolven-cotacao/1"
+    },
+    "id_requisicao": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "Identificador único desta consulta. Repetições com o mesmo id devem devolver a mesma resposta (idempotência). Também vai no cabeçalho Idempotency-Key."
+    },
+    "ramo": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "frota",
+        "residencial",
+        "condominio",
+        "empresarial",
+        "vida",
+        "vida_grupo",
+        "saude",
+        "odonto",
+        "viagem",
+        "rc",
+        "do_cyber",
+        "equipamentos",
+        "rural",
+        "transportes",
+        "garantia",
+        "fianca",
+        "previdencia"
+      ]
+    },
+    "cotacao": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numero",
+        "rodada",
+        "cenario"
+      ],
+      "properties": {
+        "numero": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "rodada": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cenario": {
+          "type": "string",
+          "enum": [
+            "minima",
+            "ampliada",
+            "franquia_reduzida",
+            "franquia_majorada"
+          ]
+        }
+      }
+    },
+    "vigencia": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inicio",
+        "fim"
+      ],
+      "properties": {
+        "inicio": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "fim": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        }
+      }
+    },
+    "corretora": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cnpj",
+        "susep",
+        "codigo_na_seguradora"
+      ],
+      "properties": {
+        "cnpj": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 14
+        },
+        "susep": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40
+        },
+        "codigo_na_seguradora": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 60,
+          "description": "Código comercial da corretora nesta seguradora (cadastro da conexão)."
+        }
+      }
+    },
+    "segurado": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tipo_pessoa",
+        "nome",
+        "documento"
+      ],
+      "properties": {
+        "tipo_pessoa": {
+          "type": "string",
+          "enum": [
+            "pf",
+            "pj"
+          ]
+        },
+        "nome": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "documento": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 14,
+          "description": "CPF ou CNPJ, só dígitos."
+        },
+        "data_nascimento": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "endereco": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cep": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 9
+            },
+            "cidade": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 120
+            },
+            "uf": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 2
+            }
+          }
+        }
+      }
+    },
+    "risco": {
+      "type": "object",
+      "description": "Questionário do ramo (campos e versão em \"versao_questionario\"). Resposta não informada vai como null — nunca é preenchida pelo APOLVEN.",
+      "required": [
+        "versao_questionario"
+      ],
+      "properties": {
+        "versao_questionario": {
+          "type": "string",
+          "maxLength": 40
+        }
+      },
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "integer",
+          "boolean",
+          "null"
+        ]
+      }
+    },
+    "coberturas_desejadas": {
+      "type": "array",
+      "maxItems": 40,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "codigo",
+          "nome",
+          "obrigatoria"
+        ],
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "nome": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "limite_minimo_centavos": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1000000000000
+          },
+          "obrigatoria": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "preferencias": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "assistencias": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "maxLength": 80
+          }
+        },
+        "franquia": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "pagamento": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        }
+      }
+    }
+  }
+}

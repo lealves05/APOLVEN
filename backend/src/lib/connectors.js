@@ -5,6 +5,12 @@
 //
 // Adaptadores reais só entram aqui depois de contrato, credenciais e homologação. Enquanto isso, o caminho
 // fica "sem conector": a empresa pode ser cadastrada, o checklist acompanhado e a consulta segue ASSISTIDA.
+//
+// Exceção controlada: "API de cotação — padrão APOLVEN" (api_padrao_apolven). Aqui a corretora informa o endereço
+// da API que a seguradora/parceiro disponibilizou seguindo o contrato público do APOLVEN (lib/quoteApi.js). O endereço
+// é validado contra SSRF no cadastro e em cada chamada (lib/safeHttp.js); o caminho, o protocolo e o formato são fixos.
+
+import { apolvenAdapter } from './apolvenApiAdapter.js';
 
 export const CAPABILITIES = {
   cotacao: 'Incluir no multicálculo automático',
@@ -105,6 +111,13 @@ export const TEMPLATES = [
     capabilities: ['cotacao', 'transmissao'],
   },
   {
+    code: 'api_padrao_apolven', version: 1, institution_code: null, method: 'api_direta', name: 'API de cotação — padrão APOLVEN', adapter: 'padrao_apolven',
+    status: 'disponivel', products: [], sources: [], self_service: true, api_config: true,
+    help: 'Para quando a seguradora, um parceiro de multicálculo ou um middleware oferecer uma API que siga o contrato público "padrão APOLVEN" (Seguradoras e Integrações › Contrato da API). Você informa o endereço https, a autenticação e as credenciais; o APOLVEN testa a conexão e, em produção e com credenciamento confirmado, passa a consultar essa seguradora automaticamente.',
+    credential_owner: 'corretora (ou parceiro, conforme o contrato com a seguradora)', fields: [], requirements: [],
+    capabilities: ['cotacao'],
+  },
+  {
     code: 'open_insurance', version: 1, institution_code: null, method: 'open_insurance', name: 'Open Insurance (participante/parceiro habilitado)', adapter: null,
     status: 'indisponivel', products: [],
     sources: [{ ref: 'F9', title: 'SUSEP — Open Insurance', verified_at: VERIFIED }],
@@ -152,7 +165,7 @@ export const templateBy = (code) => TEMPLATES.find((t) => t.code === code) || nu
 /** Visão pública do template (sem nada sensível — templates não têm segredos). */
 export const publicTemplate = (t) => t && ({
   code: t.code, version: t.version, institution_code: t.institution_code, method: t.method, method_label: METHODS[t.method], name: t.name,
-  adapter_available: hasAutomaticAdapter(t), status: t.status, status_label: CONNECTOR_STATUS[t.status], products: t.products, sources: t.sources,
+  adapter_available: hasAutomaticAdapter(t), api_config: !!t.api_config, self_service: !!t.self_service, status: t.status, status_label: CONNECTOR_STATUS[t.status], products: t.products, sources: t.sources,
   help: t.help, credential_owner: t.credential_owner, fields: t.fields.map(({ key, label, technical, secret, where }) => ({ key, label, technical, secret, where })),
   requirements: t.requirements, capabilities: t.capabilities.map((c) => ({ code: c, label: CAPABILITIES[c] })),
 });
@@ -164,6 +177,7 @@ const unsupported = () => ({ ok: false, code: 'UNSUPPORTED_CAPABILITY' });
 const ADAPTERS = {
   assistida: { testConnection: async () => ({ code: 'CONNECTOR_NOT_AVAILABLE' }), quote: unsupported, submitProposal: unsupported },
   arquivo: { testConnection: async () => ({ code: 'CONNECTOR_NOT_AVAILABLE' }), quote: unsupported, submitProposal: unsupported },
+  padrao_apolven: apolvenAdapter,
   teste_interno: {
     // decide pelo client_id para cobrir os casos A33/A35/A38 sem rede
     async testConnection({ credentials, connection, environment }) {
