@@ -9,8 +9,48 @@ import { audit } from '../audit.js';
 import { parse, HttpError, notFound, onlyDigits, validDocument, withDefaults, ROLES, PERMISSIONS, idParam } from '../util.js';
 import { COMPANY_COLS } from './auth.js';
 import { setPassword, passwordSchema } from '../security.js';
+import { decodeImage } from '../lib/printTemplate.js';
 
 const r = Router();
+
+// ---------- Logotipo (Configurações › Aparência) ----------
+// Duas versões geradas no navegador: miniatura (cabeçalho do sistema, vai na sessão) e imagem de impressão (até 1 MB).
+const LOGO_MAX = 1024 * 1024;
+const THUMB_MAX = 150 * 1024;
+
+r.get('/logo', async (req, res) => {
+  const a = await one(`select mime, encode(data, 'base64') as b64, size, updated_at from company_assets where company_id = $1 and kind = 'logo'`, [req.companyId]);
+  if (!a) {
+    // corretoras que só têm a miniatura antiga continuam funcionando
+    const c = await one('select logo_url from companies where id = $1', [req.companyId]);
+    if (c?.logo_url && /^data:image\/(png|jpeg|webp);base64,/.test(c.logo_url)) return res.json({ data_url: c.logo_url, size: null, legacy: true });
+    return res.json({ data_url: null });
+  }
+  res.json({ data_url: `data:${a.mime};base64,${a.b64}`, size: a.size, updated_at: a.updated_at });
+});
+
+r.put('/logo', need('settings'), async (req, res) => {
+  const d = parse(z.object({ image: z.string().max(1_500_000), thumb: z.string().max(210_000) }), req.body);
+  const img = decodeImage(d.image, LOGO_MAX, 'Logotipo');
+  const th = decodeImage(d.thumb, THUMB_MAX, 'Miniatura do logotipo');
+  await tx(async (db) => {
+    await db.query(`insert into company_assets (company_id, kind, mime, data, size, sha256, updated_by) values ($1,'logo',$2,$3,$4,$5,$6)
+      on conflict (company_id, kind) do update set mime = excluded.mime, data = excluded.data, size = excluded.size, sha256 = excluded.sha256, updated_by = excluded.updated_by, updated_at = now()`,
+    [req.companyId, img.mime, img.buf, img.buf.length, crypto.createHash('sha256').update(img.buf).digest('hex'), req.user.id]);
+    await db.query('update companies set logo_url = $2 where id = $1', [req.companyId, `data:${th.mime};base64,${th.buf.toString('base64')}`]);
+    await audit(db, req, { entity: 'company', entityId: req.companyId, action: 'company.logo', summary: `Logotipo da corretora atualizado (${img.mime}, ${Math.round(img.buf.length / 1024)} KB)` });
+  });
+  res.json({ ok: true, size: img.buf.length, mime: img.mime });
+});
+
+r.delete('/logo', need('settings'), async (req, res) => {
+  await tx(async (db) => {
+    await db.query(`delete from company_assets where company_id = $1 and kind = 'logo'`, [req.companyId]);
+    await db.query('update companies set logo_url = null where id = $1', [req.companyId]);
+    await audit(db, req, { entity: 'company', entityId: req.companyId, action: 'company.logo_remove', summary: 'Logotipo da corretora removido' });
+  });
+  res.json({ ok: true });
+});
 
 r.get('/', async (req, res) => {
   const c = await one(COMPANY_COLS, [req.companyId]);
@@ -45,7 +85,7 @@ r.put('/', need('settings'), async (req, res) => {
     d.document = onlyDigits(d.document);
     if (d.document.length !== 14 || !validDocument(d.document)) throw new HttpError(400, 'CNPJ inválido.');
   }
-  if (d.logo_url && !/^data:image\/(png|jpeg|webp);base64,/.test(d.logo_url) && !/^https:\/\//.test(d.logo_url)) throw new HttpError(400, 'Logotipo inválido.');
+  if (d.logo_url && !/^https:\/\//.test(d.logo_url)) decodeImage(d.logo_url, 220_000, 'Logotipo');
   const { settings, ...cols } = d;
   await tx(async (db) => {
     const sets = Object.keys(cols).map((k, i) => `${k} = $${i + 2}`);

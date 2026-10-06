@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { q, one, tx } from '../db.js';
 import { need, can } from '../auth.js';
 import { audit, emit } from '../audit.js';
-import { parse, HttpError, notFound, conflict, idParam, BRANCH_KEYS, BRANCHES, today, addDays, daysBetween, splitEven, addMonths, safeHttpsUrl } from '../util.js';
+import { parse, HttpError, notFound, conflict, idParam, BRANCH_KEYS, BRANCHES, today, addDays, daysBetween, splitEven, addMonths, safeHttpsUrl, maskDocument } from '../util.js';
 import { nextNumber, own, portfolioFilter, assertClientVisible, logActivity, docNumber, institutionFor } from '../lib/common.js';
 import { commissionSchedule, validateSplits, RECEIVABLE_AGG, receivableState } from '../lib/finance.js';
 import { INSTALLMENT_AGG, installmentState } from '../lib/premium.js';
@@ -219,6 +219,34 @@ r.get('/:id', need('policies_view'), async (req, res) => {
     installments: inst.rows.map((i) => installmentState(i, ref, req.settings.installments.upcomingDays)),
     commissions: recv.rows ? recv.rows.map((x) => receivableState(x, ref)) : null, commission_snapshot: can(req, 'commissions_view') ? p.commission_snapshot : null,
     splits: splits.rows, endorsements: ends.rows, cancellations: cancels.rows, claims: claims.rows, documents: docs.rows, previous: chain.rows, renewal, proposal });
+});
+
+/** Dados para a versão impressa (modelo da corretora): corretora, cliente completo, apólice, itens, coberturas e parcelas. */
+r.get('/:id/print-data', need('policies_view'), async (req, res) => {
+  const p = await loadPolicy(req, req.params.id);
+  const ref = today(req.settings.timezone);
+  const [company, client, items, inst, broker] = await Promise.all([
+    one(`select name, trade_name, document, susep_code, phone, email, cep, street, number, complement, district, city, uf from companies where id = $1`, [req.companyId]),
+    one('select name, kind, document, email, phone, address from clients where id = $1 and company_id = $2', [p.client_id, req.companyId]),
+    q('select description, identifier, kind from policy_items where company_id = $1 and policy_id = $2 and active order by created_at', [req.companyId, p.id]),
+    q(`select i.*, ${INSTALLMENT_AGG} from premium_installments i where i.company_id = $1 and i.policy_id = $2 and i.endorsement_id is null order by i.number`, [req.companyId, p.id]),
+    one('select name from users where id = coalesce($1::uuid, (select owner_user_id from clients where id = $2))', [p.owner_user_id, p.client_id]),
+  ]);
+  const full = can(req, 'clients_sensitive');
+  res.json({
+    company,
+    client: client && { name: client.name, kind: client.kind, document: full ? client.document : maskDocument(client.document), email: client.email, phone: client.phone, address: client.address || {} },
+    insured: p.insured_name ? { name: p.insured_name } : null,
+    payer: p.payer_name ? { name: p.payer_name } : null,
+    policy: { policy_number: p.policy_number, certificate_number: p.certificate_number, institution_name: p.institution_name, branch: p.branch, branch_label: BRANCHES[p.branch],
+      product_name: p.product_name, start_date: p.start_date, end_date: p.end_date, total_premium_cents: p.total_premium_cents, premium_net_cents: p.premium_net_cents,
+      taxes_cents: p.taxes_cents, payment_summary: p.payment_summary, contract_state: p.contract_state, assistance_phone: p.assistance_phone, notes: p.notes, created_at: p.created_at },
+    broker: broker ? { name: broker.name } : null,
+    items: items.rows,
+    coverages: Array.isArray(p.coverages) ? p.coverages.map((c) => ({ code: c.code, name: c.name, limit_cents: c.limit_cents, deductible_text: c.deductible_text, deductible_cents: c.deductible_cents })) : [],
+    installments: inst.rows.map((i) => installmentState(i, ref, req.settings.installments.upcomingDays)).map((i) => ({ number: i.number, due_date: i.due_date, amount_cents: i.amount_cents, status: i.status })),
+    today: ref,
+  });
 });
 
 /** Alteração: nunca sobrescreve silenciosamente uma apólice conferida (10.2) — exige endosso. */

@@ -11,6 +11,7 @@ import authRoutes from './routes/auth.js';
 import publicRoutes from './routes/public.js';
 import { platformApi, billing } from './routes/platform.js';
 import companyRoutes from './routes/company.js';
+import printTemplateRoutes from './routes/printTemplates.js';
 import clientRoutes, { privacy } from './routes/clients.js';
 import { opportunities, tasks } from './routes/crm.js';
 import catalogRoutes from './routes/catalog.js';
@@ -67,6 +68,7 @@ export function createApp() {
   api.use(platformGate); // assinatura, bloqueio e módulos definidos pela central
   api.use('/billing', billing);
   api.use('/company', companyRoutes);
+  api.use('/print-templates', printTemplateRoutes);
   api.use('/clients', clientRoutes);
   api.use('/privacy-requests', privacy);
   api.use('/opportunities', opportunities);
