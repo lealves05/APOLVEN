@@ -14,7 +14,7 @@ import {
 } from '../lib/format';
 import { useAuth, useSettings } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
-import {
+import { SubmitButton,
   PageHeader, Section, KV, Tabs, Stat, Modal, Input, Textarea, Select, Field, Toggle, CentsInput, FileButton,
   StatusChip, Notice, Empty, Loading, Spinner, cx, useFetch, useAction, FAIL,
 } from '../components/ui';
@@ -543,7 +543,7 @@ export function PolicyNew() {
           <span className="text-sm text-ink-faint">{problems.length ? `Falta: ${problems.join(', ')}.` : instErr || 'Pronto para cadastrar.'}</span>
           <div className="flex gap-2">
             <Link to="/apolices" className="btn-ghost">Cancelar</Link>
-            <button className="btn-primary" disabled={busy || problems.length > 0 || !!instErr} onClick={submit}>{busy ? <Spinner className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />} Cadastrar apólice</button>
+            <SubmitButton busy={busy} problems={[...problems.map((x) => `Falta: ${x}.`), instErr]} onClick={submit}>{busy ? <Spinner className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />} Cadastrar apólice</SubmitButton>
           </div>
         </div>
       </div>
@@ -734,7 +734,7 @@ function StatusModal({ p, onClose, onDone }) {
   return (
     <Modal open onClose={onClose} title="Alterar estado contratual" subtitle="Alteração manual — exige justificativa e evidência; a origem manual fica identificada"
       footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button>
-        <button className="btn-primary" disabled={!ok || busy} onClick={async () => { const r = await run(() => api.post(`/v1/policies/${p.id}/status`, f), 'Estado contratual atualizado.'); if (r !== FAIL) onDone(); }}>Salvar</button></>}>
+        <SubmitButton busy={busy} problems={[f.reason.trim().length < 5 && { text: 'Informe a justificativa (mín. 5 caracteres).', field: 'Justificativa' }, f.evidence.trim().length < 3 && { text: 'Informe a evidência.', field: 'Evidência' }]} onClick={async () => { const r = await run(() => api.post(`/v1/policies/${p.id}/status`, f), 'Estado contratual atualizado.'); if (r !== FAIL) onDone(); }}>Salvar</SubmitButton></>}>
       <div className="space-y-3">
         <Notice tone="warn">Atraso isolado de parcela não suspende nem cancela cobertura. Use somente com fundamento contratual e evidência (comunicado da seguradora, consulta ao portal…). Cancelamento tem fluxo próprio.</Notice>
         <div className="text-sm">Atual: <StatusChip map={CONTRACT_STATE} value={p.contract_state} /></div>
@@ -789,7 +789,7 @@ function EditModal({ p, onClose, onDone, onEndorse }) {
   return (
     <Modal open onClose={onClose} size="lg" title="Editar apólice" subtitle="Toda alteração gera nova versão com motivo"
       footer={<><span className="mr-auto text-xs text-ink-faint">{n} campo(s) alterado(s)</span><button className="btn-ghost" onClick={onClose}>Voltar</button>
-        <button className="btn-primary" disabled={!n || reason.trim().length < 3 || busy} onClick={save}>Salvar alterações</button></>}>
+        <SubmitButton busy={busy} onClick={save} problems={[!n && 'Nenhuma alteração para salvar.', reason.trim().length < 3 && { text: 'Informe o motivo da alteração.', field: 'Motivo da alteração' }]}>Salvar alterações</SubmitButton></>}>
       <div className="space-y-4">
         {locked && (
           <Notice tone="warn">
@@ -968,7 +968,7 @@ export function PaymentModal({ inst, clientId, onClose, onDone }) {
   return (
     <Modal open onClose={onClose} title={`Registrar pagamento — parcela ${inst.number}/${inst.total_count || '?'}`}
       subtitle={`Vencimento ${fmt(inst.due_date)} · saldo ${money(inst.balance_cents)}`}
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!ok || busy} onClick={save}>Registrar</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={save} problems={[!(f.amount_cents > 0) && { text: 'Informe o valor pago.', field: 'Valor pago' }, !f.paid_date && { text: 'Informe a data do pagamento.', field: 'Data do pagamento' }, f.paid_date > ymd() && 'A data do pagamento não pode ser futura.', confirmed && f.evidence.trim().length < 3 && { text: 'Pagamento confirmado exige evidência.', field: 'Evidência' }, confirmed && f.amount_cents > inst.balance_cents && 'O valor confirmado passa do saldo da parcela.']}>Registrar</SubmitButton></>}>
       <div className="space-y-3">
         <div role="radiogroup" aria-label="Tipo de registro" className="grid gap-2 sm:grid-cols-2">
           {[['informado', 'Pagamento informado', 'Cliente ou equipe informou; cria conferência e pausa lembretes.'],
@@ -1044,7 +1044,7 @@ function ChargeModal({ inst, onClose, onDone }) {
   };
   return (
     <Modal open onClose={onClose} title={`Atualizar cobrança — parcela ${inst.number}`} subtitle="Somente cobrança oficial emitida pela seguradora (a corretora não emite boleto de prêmio)"
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!ok || busy} onClick={save}>Salvar</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={save} problems={[!isHttps(f.charge_url) && { text: 'Informe o link oficial de cobrança começando com https://.', field: 'Link oficial de cobrança' }, dueChanged && f.reason.trim().length < 3 && { text: 'Mudou o vencimento: informe o motivo.', field: 'Motivo' }]}>Salvar</SubmitButton></>}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Input className="sm:col-span-2" label="Link oficial de cobrança (https)" value={f.charge_url} placeholder="https://…" onChange={(e) => setF({ ...f, charge_url: e.target.value })} />
         {!isHttps(f.charge_url) && <Notice tone="danger" className="sm:col-span-2">Use apenas link https de origem oficial.</Notice>}
@@ -1072,7 +1072,7 @@ function SpecialStatusModal({ inst, onClose, onDone }) {
   };
   return (
     <Modal open onClose={onClose} title={`Estado especial — parcela ${inst.number}`} subtitle="Estados que dependem de informação formal da seguradora"
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!ok || busy} onClick={save}>Salvar</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={save} problems={[f.reason.trim().length < 3 && { text: 'Informe o motivo / fundamento.', field: 'Motivo / fundamento' }, restit && !(refund.amount_cents > 0) && { text: 'Informe o valor devolvido.', field: 'Valor devolvido' }, restit && !refund.confirmed_date && 'Informe a data da devolução.', restit && refund.evidence.trim().length < 3 && { text: 'Informe a evidência da devolução.', field: 'Evidência' }]}>Salvar</SubmitButton></>}>
       <div className="space-y-3">
         <div className="text-sm">Atual: <StatusChip map={INSTALLMENT_STATUS} value={inst.status} /></div>
         <Select label="Novo estado" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}>
@@ -1108,7 +1108,7 @@ function AddInstallmentsModal({ p, onClose, onDone }) {
   return (
     <Modal open onClose={onClose} size="xl" title="Adicionar parcelas" subtitle="Calendário real retornado pela seguradora"
       footer={<><span className="mr-auto text-xs text-ink-faint">{list.length ? err || '' : ''}</span><button className="btn-ghost" onClick={onClose}>Voltar</button>
-        <button className="btn-primary" disabled={!!err || busy} onClick={save}>Incluir parcelas</button></>}>
+        <SubmitButton busy={busy} onClick={save} problems={[err]}>Incluir parcelas</SubmitButton></>}>
       <div className="space-y-3">
         {emitted.length > 0 && (
           <Select label="Referente a" value={eid} onChange={(e) => setEid(e.target.value)}>
@@ -1132,7 +1132,7 @@ function PlanModal({ p, onClose, onDone }) {
   };
   return (
     <Modal open onClose={onClose} title="Gerar plano de parcelas" subtitle="Parcelas iguais, resíduo de centavos nas primeiras"
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!f.total_cents || !f.first_due || busy} onClick={save}>Gerar</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={save} problems={[!f.total_cents && 'Informe o valor total.', !f.first_due && 'Informe o 1º vencimento.']}>Gerar</SubmitButton></>}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Input label="Quantidade (1 a 24)" type="number" min={1} max={24} value={f.count} onChange={(e) => setF({ ...f, count: e.target.value })} />
         <Input label="1º vencimento" type="date" value={f.first_due} onChange={(e) => setF({ ...f, first_due: e.target.value })} />
@@ -1387,7 +1387,7 @@ function EndorsementCreateModal({ p, onClose, onDone }) {
   return (
     <Modal open onClose={onClose} title="Solicitar endosso" subtitle={`Apólice ${p.policy_number || ''}`}
       footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button>
-        <button className="btn-primary" disabled={!ok || busy} onClick={async () => { const r = await run(() => api.post(`/v1/policies/${p.id}/endorsements`, { ...f, reason: f.reason.trim(), changes: f.changes.trim() }), 'Endosso solicitado.'); if (r !== FAIL) onDone(); }}>Solicitar</button></>}>
+        <SubmitButton busy={busy} problems={[!f.requested_date && { text: 'Informe a data pretendida.', field: 'Data pretendida' }, f.reason.trim().length < 3 && { text: 'Informe o motivo.', field: 'Motivo' }, f.changes.trim().length < 3 && { text: 'Descreva as alterações solicitadas.', field: 'Alterações solicitadas' }]} onClick={async () => { const r = await run(() => api.post(`/v1/policies/${p.id}/endorsements`, { ...f, reason: f.reason.trim(), changes: f.changes.trim() }), 'Endosso solicitado.'); if (r !== FAIL) onDone(); }}>Solicitar</SubmitButton></>}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Select label="Tipo" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>{Object.entries(ENDORSEMENT_KINDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
         <Input label="Data pretendida *" type="date" value={f.requested_date} onChange={(e) => setF({ ...f, requested_date: e.target.value })} />
@@ -1428,7 +1428,7 @@ function EndorsementUpdateModal({ p, e, onClose, onDone }) {
   };
   return (
     <Modal open onClose={onClose} size="xl" title={`Atualizar endosso nº ${e.number}`} subtitle={`${ENDORSEMENT_KINDS[e.kind] || e.kind} — ${e.reason}`}
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={busy || missing || !!instErr} onClick={save}>Salvar</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={save} problems={[missing && 'Para emitir: informe a data de efeito e anexe o documento ou o protocolo.', instErr]}>Salvar</SubmitButton></>}>
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-3">
           <Select label="Situação" value={f.status} onChange={(ev) => setF({ ...f, status: ev.target.value })}>

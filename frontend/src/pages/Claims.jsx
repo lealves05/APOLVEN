@@ -7,7 +7,7 @@ import { api, qs, download, fileToPayload } from '../lib/api';
 import { moneyOrNA, fmt, fmtDateTime, docNumber, CLAIM_STATUS, REQUEST_STATUS, PRIORITY } from '../lib/format';
 import { useAuth, useSettings } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
-import {
+import { SubmitButton,
   PageHeader, Section, KV, Tabs, Modal, Input, Textarea, Select, Field, Toggle, CentsInput, FileButton, StatusChip, Notice, Empty, Loading, Spinner, cx, useFetch, useAction, FAIL,
 } from '../components/ui';
 import { ClientPicker } from './Policies';
@@ -187,7 +187,7 @@ function ClaimCreateModal({ policyId, onClose, onDone }) {
   };
   return (
     <Modal open onClose={onClose} size="lg" title="Novo sinistro" subtitle={BANNER}
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!ok || busy} onClick={save}>Registrar sinistro</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={save} problems={[!policy && { text: 'Escolha a apólice do sinistro.', field: 'Apólice' }, !f.occurred_at && { text: 'Informe data e hora da ocorrência.', field: 'Data e hora da ocorrência' }, f.description.trim().length < 5 && { text: 'Descreva o ocorrido (mín. 5 caracteres).', field: 'Descrição do ocorrido' }, f.deadline_at && f.deadline_rule.trim().length < 3 && { text: 'Informe o fundamento do prazo.', field: 'Fundamento do prazo' }]}>Registrar sinistro</SubmitButton></>}>
       <div className="space-y-4">
         <PolicyPicker value={policy} onChange={(p) => { setPolicy(p); set('item_id', ''); }} />
         {policy && (
@@ -276,7 +276,7 @@ function RequestCreateModal({ users, onClose, onDone }) {
   };
   return (
     <Modal open onClose={onClose} size="lg" title="Nova solicitação"
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!ok || busy} onClick={save}>Registrar</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={save} problems={[!client && { text: 'Escolha o cliente.', field: 'Cliente' }, f.description.trim().length < 3 && { text: 'Descreva a solicitação.', field: 'Descrição' }]}>Registrar</SubmitButton></>}>
       <div className="grid gap-3 sm:grid-cols-2">
         <ClientPicker label="Cliente *" value={client} onChange={setClient} />
         {client ? <PolicyPicker label="Apólice relacionada" optional clientId={client.id} value={policy} onChange={setPolicy} /> : <div />}
@@ -310,7 +310,7 @@ function RequestUpdateModal({ r, users, onClose, onDone }) {
   };
   return (
     <Modal open onClose={onClose} title="Atualizar solicitação" subtitle={`${REQUEST_KINDS[r.kind] || r.kind} — ${r.client_name}`}
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!ok || busy} onClick={save}>Salvar</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={save} problems={!ok ? [{ text: 'Para concluir, descreva a resolução.', field: 'Resolução' }] : []}>Salvar</SubmitButton></>}>
       <div className="space-y-3">
         <p className="whitespace-pre-line rounded-app-sm bg-muted p-3 text-sm">{r.description}</p>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -478,7 +478,7 @@ function ClaimUpdateModal({ s, users, statuses, onClose, onDone }) {
   return (
     <Modal open onClose={onClose} size="lg" title="Atualizar andamento do sinistro" subtitle="Cada alteração fica registrada no histórico"
       footer={<><span className="mr-auto text-xs text-ink-faint">{problems.length ? `Falta: ${problems.join(', ')}.` : `${n} alteração(ões)`}</span>
-        <button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!n || problems.length > 0 || busy} onClick={save}>Salvar</button></>}>
+        <button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={save} problems={[...problems.map((x) => `Falta: ${x}.`), !n && 'Nenhuma alteração para salvar.']}>Salvar</SubmitButton></>}>
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <Select label="Situação do trabalho da corretora" value={f.work_status} onChange={(e) => set('work_status', e.target.value)}>

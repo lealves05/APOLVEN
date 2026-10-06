@@ -7,7 +7,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, Cart
 import { api, fileToText, qs } from '../lib/api';
 import { money, fmt, fmtDateTime, ymd, docNumber } from '../lib/format';
 import { useAuth, useSettings } from '../context/AuthContext';
-import {
+import { SubmitButton,
   PageHeader, Section, KV, Tabs, Stat, Modal, PromptModal, Input, Textarea, Select, CentsInput, FileButton, StatusChip, Notice, Empty, Loading, useFetch, useAction, FAIL, cx,
 } from '../components/ui';
 import { useTable, SortTh, Pager } from '../components/Table';
@@ -168,7 +168,7 @@ function BankImport({ accounts, defaultAccount, onClose, onDone }) {
     <Modal open onClose={onClose} size="xl" title="Importar extrato bancário" subtitle="OFX ou CSV. Arquivo repetido é recusado; lançamentos já importados não duplicam."
       footer={summary ? <button className="btn-primary" onClick={onClose}>Concluir</button> : <>
         <button className="btn-ghost" onClick={onClose}>Cancelar</button>
-        <button className="btn-primary" disabled={!preview || busy || preview.duplicate_file || !preview.lines.length} onClick={doImport}><Upload className="h-4 w-4" /> Importar {preview?.lines.length || 0} lançamento(s)</button>
+        <SubmitButton busy={busy} onClick={doImport} problems={[!preview && 'Escolha a conta e o arquivo do extrato para ver a prévia.', preview?.duplicate_file && 'Este arquivo já foi importado.', preview && !preview.lines.length && 'Nenhum lançamento novo para importar.']}><Upload className="h-4 w-4" /> Importar {preview?.lines.length || 0} lançamento(s)</SubmitButton>
       </>}>
       <div className="space-y-4">
         {summary ? (
@@ -305,7 +305,7 @@ function ReconcileTx({ tx, onClose, onChanged }) {
                     {cats.map((x) => <option key={x} value={x}>{x}</option>)}
                   </Select>
                   <Input label="Descrição" value={entry.description} onChange={(e) => setEntry({ ...entry, description: e.target.value })} />
-                  <button className="btn-primary" disabled={busy || !entry.category || entry.description.trim().length < 2} onClick={direct}><CheckCircle2 className="h-4 w-4" /> Lançar e conciliar</button>
+                  <SubmitButton busy={busy} onClick={direct} problems={[!entry.category && 'Escolha a categoria.', entry.description.trim().length < 2 && 'Escreva uma descrição.']}><CheckCircle2 className="h-4 w-4" /> Lançar e conciliar</SubmitButton>
                 </div>
               </Section>
             )}
@@ -414,7 +414,7 @@ function Entries() {
       <p className="text-xs text-ink-faint">Lançamentos de origem "Comissão" e "Repasse" são gerados pelas liquidações e lotes; para corrigi-los, desfaça na origem. Prefira conciliar com o extrato a dar baixa manual.</p>
 
       <Modal open={!!form} onClose={() => setForm(null)} size="lg" title="Novo lançamento"
-        footer={<><button className="btn-ghost" onClick={() => setForm(null)}>Voltar</button><button className="btn-primary" disabled={!okForm || busy} onClick={save}>Salvar</button></>}>
+        footer={<><button className="btn-ghost" onClick={() => setForm(null)}>Voltar</button><SubmitButton busy={busy} onClick={save} problems={[!form?.category && 'Escolha a categoria.', String(form?.description || '').trim().length < 2 && 'Escreva uma descrição.', !(form?.amount_cents > 0) && 'Informe o valor.', !form?.competence && 'Informe a competência.', !form?.due_date && 'Informe o vencimento.']}>Salvar</SubmitButton></>}>
         {form && (
           <div className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">

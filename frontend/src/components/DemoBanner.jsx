@@ -37,7 +37,7 @@ function ActivateModal({ onClose }) {
   return (
     <Modal open onClose={onClose} title="Ativar o uso normal" subtitle="Transforme a demonstração na conta da sua corretora"
       footer={<><button className="btn-ghost" onClick={onClose}>Continuar testando</button>
-        <button className="btn-primary" disabled={busy || !f.companyName || !f.name || !f.email || f.password.length < 6} onClick={go}><Rocket className="h-4 w-4" /> Ativar</button></>}>
+        <SubmitButton busy={busy} onClick={go} problems={[!f.companyName && { text: 'Informe o nome da corretora.', field: 'Nome da corretora' }, !f.name && { text: 'Informe seu nome.', field: 'Seu nome' }, !f.email && { text: 'Informe o e-mail.', field: 'E-mail' }, f.password.length < 10 && { text: 'A senha precisa de no mínimo 10 caracteres.', field: 'Senha' }]}><Rocket className="h-4 w-4" /> Ativar</SubmitButton></>}>
       <div className="space-y-4">
         <Input label="Nome da corretora" value={f.companyName} onChange={set('companyName')} autoFocus />
         <div className="grid gap-4 sm:grid-cols-2">

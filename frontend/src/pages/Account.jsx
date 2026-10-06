@@ -5,7 +5,7 @@ import { ShieldCheck, KeyRound, LogOut, Copy } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
-import { Input, PageHeader, Section, Notice, Toggle, useAction, FAIL, cx } from '../components/ui';
+import { SubmitButton, Input, PageHeader, Section, Notice, Toggle, useAction, FAIL, cx } from '../components/ui';
 import { ROLES } from '../lib/format';
 import { PRESET_COLORS } from '../lib/theme';
 import { Logo } from '../components/Layout';
@@ -114,7 +114,7 @@ export default function Account() {
               <Input label="Nova senha" type="password" autoComplete="new-password" hint="Mínimo de 10 caracteres, com letras e números" value={pw.newPassword} onChange={(e) => setPw({ ...pw, newPassword: e.target.value })} />
               <Input label="Repita a nova senha" type="password" autoComplete="new-password" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} />
             </div>
-            <button className="btn-primary" disabled={busy || !pw.currentPassword || pw.newPassword.length < 10} onClick={changePw}><KeyRound className="h-4 w-4" /> Trocar senha</button>
+            <SubmitButton busy={busy} onClick={changePw} problems={[!pw.currentPassword && { text: 'Informe a senha atual.', field: 'Senha atual' }, pw.newPassword.length < 10 && { text: 'A nova senha precisa de no mínimo 10 caracteres.', field: 'Nova senha' }]}><KeyRound className="h-4 w-4" /> Trocar senha</SubmitButton>
           </div>
         </Section>
         <Section title="Verificação em duas etapas" subtitle={required ? 'Obrigatória para o seu perfil.' : 'Recomendada; obrigatória para administrar credenciais de integração.'} className="lg:col-span-2">

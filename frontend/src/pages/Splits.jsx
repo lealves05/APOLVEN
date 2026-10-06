@@ -7,7 +7,7 @@ import { api, qs } from '../lib/api';
 import { money, fmt, fmtDateTime, pct, ymd, docNumber, maskDoc, maskPhone, ACCRUAL_STATUS, ACCRUAL_KIND, BATCH_STATUS, BRANCHES } from '../lib/format';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
-import {
+import { SubmitButton,
   PageHeader, Section, KV, Tabs, Stat, Modal, PromptModal, Input, Textarea, Select, Toggle, CentsInput, StatusChip, Notice, Empty, Loading, useFetch, useAction, FAIL, cx,
 } from '../components/ui';
 import { useTable, SortTh, Pager } from '../components/Table';
@@ -147,7 +147,7 @@ function Partners() {
       )}
 
       <Modal open={!!form} onClose={() => setForm(null)} size="lg" title={form?.mode === 'new' ? 'Novo parceiro' : 'Editar parceiro'}
-        footer={<><button className="btn-ghost" onClick={() => setForm(null)}>Voltar</button><button className="btn-primary" disabled={!okForm || busy} onClick={save}>Salvar</button></>}>
+        footer={<><button className="btn-ghost" onClick={() => setForm(null)}>Voltar</button><SubmitButton busy={busy} onClick={save} problems={[String(fv?.name || '').trim().length < 2 && { text: 'Informe o nome do favorecido.', field: 'Nome' }, fv?.withBank && !bankOk(fv.bank) && 'Complete os dados bancários (banco, agência, conta) ou a chave Pix.']}>Salvar</SubmitButton></>}>
         {fv && (
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -192,7 +192,7 @@ function BankChange({ partner, mfa, onClose, onDone }) {
   const ok = bankOk(b) && reason.trim().length >= 3 && (mfa ? /^\d{6}$/.test(secret) : secret.length > 0);
   return (
     <Modal open onClose={onClose} size="lg" title="Alterar favorecido" subtitle={partner.name}
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!ok || busy} onClick={submit}><ShieldCheck className="h-4 w-4" /> Confirmar alteração</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={submit} problems={[!bankOk(b) && 'Complete os dados bancários (banco, agência, conta) ou a chave Pix.', reason.trim().length < 3 && { text: 'Informe o motivo da alteração.', field: 'Motivo' }, !(mfa ? /^\d{6}$/.test(secret) : secret.length > 0) && (mfa ? 'Digite o código de 6 dígitos do autenticador.' : 'Digite sua senha para confirmar.')]}><ShieldCheck className="h-4 w-4" /> Confirmar alteração</SubmitButton></>}>
       <div className="space-y-4">
         <Notice tone="warn">Troca de favorecido é operação sensível: exige reautenticação e fica na auditoria. Lotes já aprovados mantêm o favorecido congelado no momento da aprovação.</Notice>
         {partner.bank_info && <div className="rounded-app-sm bg-muted p-3"><div className="mb-1 text-xs text-ink-faint">Favorecido atual</div><Payee b={partner.bank_info} /></div>}
@@ -270,7 +270,7 @@ function Rules() {
         </div>
       )}
       <Modal open={!!form} onClose={() => setForm(null)} size="lg" title="Nova regra de repasse" subtitle="Uma nova versão é criada quando o nome da regra já existe para o parceiro."
-        footer={<><button className="btn-ghost" onClick={() => setForm(null)}>Voltar</button><button className="btn-primary" disabled={!ok || busy} onClick={save}>Registrar regra</button></>}>
+        footer={<><button className="btn-ghost" onClick={() => setForm(null)}>Voltar</button><SubmitButton busy={busy} onClick={save} problems={[!form?.partner_id && 'Escolha o parceiro/produtor.', String(form?.name || '').trim().length < 2 && { text: 'Dê um nome à regra.', field: 'Nome' }, form && !(form.kind === 'percentual' ? rate != null && rate >= 0 && rate <= 100 : form.fixed_cents > 0) && (form.kind === 'percentual' ? 'Informe o percentual (0 a 100).' : 'Informe o valor fixo.')]}>Registrar regra</SubmitButton></>}>
         {form && (
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -581,7 +581,7 @@ function PayBatch({ batch, onClose, onDone }) {
   const avail = (t) => -Number(t.amount_cents) - Number(t.matched_cents || 0);
   return (
     <Modal open onClose={onClose} size="lg" title="Registrar pagamento do lote" subtitle={`Total do lote: ${money(batch.total_cents)}`}
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={!sel || busy} onClick={submit}><CheckCircle2 className="h-4 w-4" /> Vincular e marcar como pago</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><SubmitButton busy={busy} onClick={submit} problems={[!sel && 'Escolha o lançamento bancário que corresponde a este pagamento.']}><CheckCircle2 className="h-4 w-4" /> Vincular e marcar como pago</SubmitButton></>}>
       <div className="space-y-3">
         <Notice>O lote só é pago com <b>evidência bancária conciliada</b>: escolha a saída (débito) do extrato que corresponde à transferência. O débito precisa cobrir o total do lote.</Notice>
         {txs === null ? <Loading /> : err ? <Notice tone="danger">{err}{!can('finance') && ' — é preciso acesso ao Financeiro para ver o extrato bancário.'}</Notice> : !txs.length ? (

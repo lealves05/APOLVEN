@@ -11,7 +11,7 @@ import {
 } from '../lib/format';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
-import {
+import { SubmitButton,
   PageHeader, Section, KV, Tabs, Modal, PromptModal, Input, Textarea, Select, Toggle, FileButton, StatusChip, Notice, Empty, Loading, Spinner,
   useFetch, useAction, FAIL, cx,
 } from '../components/ui';
@@ -245,7 +245,7 @@ function NewClientModal({ open, onClose, onCreated }) {
       ) : (
         <>
           <button className="btn-ghost" onClick={onClose}>Cancelar</button>
-          <button className="btn-primary" disabled={busy || v.name.trim().length < 2 || !docOk} onClick={save}>{busy ? 'Salvando…' : 'Cadastrar cliente'}</button>
+          <SubmitButton busy={busy} onClick={save} problems={[v.name.trim().length < 2 && { text: v.kind === 'pj' ? 'Informe a razão social.' : 'Informe o nome completo.', field: v.kind === 'pj' ? 'Razão social' : 'Nome completo' }, !docOk && { text: `${v.kind === 'pj' ? 'CNPJ' : 'CPF'} incompleto: confira os dígitos (ou deixe em branco).`, field: v.kind === 'pj' ? 'CNPJ' : 'CPF' }]}>{busy ? 'Salvando…' : 'Cadastrar cliente'}</SubmitButton>
         </>
       )}>
       {similar ? (

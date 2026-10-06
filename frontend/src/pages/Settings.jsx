@@ -6,7 +6,7 @@ import { Plus, Pencil, Copy, ShieldCheck, ShieldOff, Upload, Trash2, Save, KeyRo
 import { api, fileToPayload } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
-import {
+import { SubmitButton,
   PageHeader, Section, Tabs, Modal, Input, Textarea, Select, Toggle, Notice, Empty, Loading, FileButton, useFetch, useAction, FAIL, cx,
 } from '../components/ui';
 import { ROLES, maskDoc, maskPhone, maskCep, lookupCep, fmtDateTime, onlyDigits } from '../lib/format';
@@ -285,7 +285,7 @@ function UserModal({ u, units, onClose, onDone }) {
   return (
     <Modal open onClose={onClose} title={isNew ? 'Convidar usuário' : `Editar ${u.name}`}
       footer={<><button className="btn-ghost" onClick={onClose}>Cancelar</button>
-        <button className="btn-primary" disabled={busy || v.name.trim().length < 2 || !/\S+@\S+\.\S+/.test(v.email)} onClick={save}>Salvar</button></>}>
+        <SubmitButton busy={busy} onClick={save} problems={[v.name.trim().length < 2 && { text: 'Informe o nome.', field: 'Nome' }, !/\S+@\S+\.\S+/.test(v.email) && { text: 'Informe um e-mail válido.', field: 'E-mail' }]}>Salvar</SubmitButton></>}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Input label="Nome *" value={v.name} maxLength={120} onChange={(e) => setV({ ...v, name: e.target.value })} />
         <Input label="E-mail *" type="email" value={v.email} maxLength={160} onChange={(e) => setV({ ...v, email: e.target.value })} />

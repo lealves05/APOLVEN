@@ -5,7 +5,7 @@ import { Target, Plus, LayoutGrid, List, Calculator, AlertTriangle, CalendarCloc
 import { api, qs } from '../lib/api';
 import { STAGES, QUOTE_REQUEST_STATUS, money, fmt, fmtDateTime, docNumber } from '../lib/format';
 import { useAuth } from '../context/AuthContext';
-import {
+import { SubmitButton,
   PageHeader, Section, KV, Modal, Input, Textarea, Select, CentsInput, StatusChip, Notice, Empty, Loading, Toggle, useFetch, useAction, FAIL, cx,
 } from '../components/ui';
 import { useTable, SortTh, Pager } from '../components/Table';
@@ -90,7 +90,7 @@ function NewOppModal({ open, onClose, onCreated, users, initialClient }) {
   return (
     <Modal open={open} onClose={onClose} size="lg" title="Nova oportunidade"
       footer={<><button className="btn-ghost" onClick={onClose}>Cancelar</button>
-        <button className="btn-primary" disabled={busy || !v.client || v.title.trim().length < 2} onClick={save}>{busy ? 'Salvando…' : 'Criar oportunidade'}</button></>}>
+        <SubmitButton busy={busy} onClick={save} problems={[!v.client && { text: 'Escolha o cliente.', field: 'Cliente' }, v.title.trim().length < 2 && { text: 'Dê um título à oportunidade.', field: 'Título' }]}>{busy ? 'Salvando…' : 'Criar oportunidade'}</SubmitButton></>}>
       <OppForm v={v} set={setV} users={users} isNew canOwner={scope('opportunities') === 'all'} />
     </Modal>
   );

@@ -5,7 +5,7 @@ import { MessageCircle, Mail, Phone, Plus, AlertTriangle, Info, Send, ExternalLi
 import { api } from '../lib/api';
 import { fmtDateTime, waLink, fillTemplate, onlyDigits } from '../lib/format';
 import { useAuth } from '../context/AuthContext';
-import { PageHeader, Section, Modal, Textarea, Select, Notice, Empty, Loading, useFetch, useAction, FAIL, cx } from '../components/ui';
+import { SubmitButton, PageHeader, Section, Modal, Textarea, Select, Notice, Empty, Loading, useFetch, useAction, FAIL, cx } from '../components/ui';
 import { useTable, SortTh, Pager } from '../components/Table';
 import { ClientPicker } from './Clients';
 
@@ -58,7 +58,7 @@ function ComposeModal({ open, onClose, onSaved, templates }) {
       footer={ready ? <button className="btn-ghost" onClick={onClose}>Fechar</button> : (
         <>
           <button className="btn-ghost" onClick={onClose}>Cancelar</button>
-          <button className="btn-primary" disabled={busy || !v.client || v.body.trim().length < 2} onClick={save}><Send className="h-4 w-4" /> {busy ? 'Preparando…' : 'Preparar envio'}</button>
+          <SubmitButton busy={busy} onClick={save} problems={[!v.client && { text: 'Escolha o cliente.', field: 'Cliente' }, v.body.trim().length < 2 && { text: 'Escreva a mensagem.', field: 'Mensagem' }]}><Send className="h-4 w-4" /> {busy ? 'Preparando…' : 'Preparar envio'}</SubmitButton>
         </>
       )}>
       {ready ? (
