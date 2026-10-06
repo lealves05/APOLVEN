@@ -23,7 +23,7 @@ const httpsProblem = (v, label) => {
 };
 
 export default function QuoteApiConfig({ c, reload, readOnly, onTest, testing }) {
-  const { user } = useAuth();
+  const { user, company } = useAuth();
   const [run, busy] = useAction();
   const cfg = c.api_config || null;
   const active = (c.credentials || []).find((x) => !x.revoked_at);
@@ -76,7 +76,7 @@ export default function QuoteApiConfig({ c, reload, readOnly, onTest, testing })
         <Section title="API de cotação" subtitle="Endereço e autenticação da API que a seguradora (ou parceiro/middleware) disponibilizou no padrão APOLVEN">
           {readOnly ? <Notice>Seu perfil não administra credenciais desta conexão.</Notice> : (
             <form className="space-y-4" autoComplete="off" onSubmit={(e) => { e.preventDefault(); if (!problems.length) save(); }}>
-              {!user?.mfa_enabled && <Notice>Administrar credenciais exige verificação em duas etapas ativa. <Link to="/conta" className="underline">Ativar em Minha conta</Link>.</Notice>}
+              {!user?.mfa_enabled && !company?.is_demo && <Notice>Administrar credenciais exige verificação em duas etapas ativa. <Link to="/conta" className="underline">Ativar em Minha conta</Link>.</Notice>}
               {mfaMissing && <Notice tone="danger">Ative a verificação em duas etapas para administrar credenciais. <Link to="/conta" className="underline">Ir para Minha conta</Link>.</Notice>}
               <Input label="Endereço base da API (https) *" value={v.base_url} onChange={(e) => set('base_url', e.target.value)} placeholder="https://api.seguradora.com.br/apolven"
                 inputMode="url" spellCheck={false} autoCapitalize="off"

@@ -845,7 +845,10 @@ function QuoteResults({ requestId }) {
   const tasks = round.tasks;
   const done = tasks.filter((t) => !['consultando', 'nova_tentativa', 'assistida'].includes(liveOf(t))).length;
   const offers = (round.offers || []).filter((o) => o.status === 'ativa');
-  const best = round.badges?.best_fit || round.badges?.lowest_cost || null;
+  // melhor opção para enviar: só cotação válida (valor indicativo precisa ser confirmado antes da escolha do cliente)
+  const firm = offers.filter((o) => o.quote_kind === 'cotacao_valida' && o.comparison?.klass !== 'incompativel' && !o.comparison?.expired);
+  const best = [round.badges?.best_fit, round.badges?.lowest_cost].find((x) => x && firm.some((o) => o.id === x))
+    || [...firm].sort((a, b) => a.total_premium_cents - b.total_premium_cents)[0]?.id || null;
   const multiScenario = new Set(tasks.map((t) => t.scenario)).size > 1;
   const chooseBest = () => { if (best) { setSelected([best]); setCompOpen(true); } };
 

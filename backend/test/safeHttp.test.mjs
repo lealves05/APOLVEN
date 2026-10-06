@@ -34,6 +34,7 @@ test('DNS: nome que resolve para rede interna é bloqueado; localhost só com AP
   process.env.APOLVEN_ALLOW_LOCAL_API = '1';
   assert.equal(validateApiUrl('http://localhost:4890/x').local, true);
   assert.equal(await code(() => resolvePublic('localhost', { local: true })), 'ok');
+  assert.equal(await code(() => resolvePublic('localhost')), 'ok', 'nome que resolve para loopback: só com a variável');
   assert.equal(await code(() => validateApiUrl('http://10.0.0.1:4890/')), 'URL_INVALID', 'a variável libera só localhost, não a rede interna');
   delete process.env.APOLVEN_ALLOW_LOCAL_API;
 });

@@ -4,7 +4,8 @@
 //    metadados de nuvem, CGNAT, multicast, documentação, 6to4/Teredo/NAT64… são recusados — IPv4 e IPv6);
 //  - a conexão é feita no IP já conferido (sem nova resolução: evita DNS rebinding), com SNI/Host do nome original;
 //  - sem redirecionamento, com tempo máximo e limite de tamanho da resposta.
-// Localhost só é aceito com APOLVEN_ALLOW_LOCAL_API=1 (desenvolvimento/testes) — nunca por padrão.
+// Localhost só é aceito com APOLVEN_ALLOW_LOCAL_API=1 (desenvolvimento/testes/gravação de aulas) — nunca por padrão:
+// com a variável, aceita-se "localhost" e nomes que resolvem para loopback (127.0.0.0/8, ::1); outras redes internas continuam bloqueadas.
 import dns from 'node:dns';
 import net from 'node:net';
 import http from 'node:http';
@@ -112,7 +113,7 @@ export async function resolvePublic(host, { local = false } = {}) {
   } catch { throw new SafeHttpError('DNS_FAILED', 'Não foi possível encontrar o servidor da API (DNS).'); }
   if (!addrs?.length) throw new SafeHttpError('DNS_FAILED', 'Não foi possível encontrar o servidor da API (DNS).');
   for (const a of addrs) {
-    const ok = local ? isLoopback(a.address) : isPublicIp(a.address);
+    const ok = local ? isLoopback(a.address) : isPublicIp(a.address) || (localApiAllowed() && isLoopback(a.address));
     if (!ok) throw new SafeHttpError('HOST_BLOCKED', 'O endereço da API aponta para uma rede interna ou reservada e foi bloqueado.');
   }
   return addrs[0].address;
