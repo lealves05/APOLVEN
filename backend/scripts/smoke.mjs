@@ -2,6 +2,7 @@
 // Uso: API=http://localhost:3334 DATABASE_URL=... node scripts/smoke.mjs
 // Cobre os exemplos financeiros da seção 16 e os casos A01–A42 aplicáveis a esta versão.
 import pg from 'pg';
+import { spawn } from 'node:child_process';
 import { totp } from '../src/auth.js';
 
 const API = process.env.API || 'http://localhost:3334';
@@ -552,6 +553,123 @@ section('Endosso, cancelamento, renovação, sinistro');
   ok(s1.status === 201, 'sinistro registrado');
   const s2 = await call(T, 'PUT', `/api/v1/claims/${s1.data.id}`, { work_status: 'negado' });
   ok(s2.status === 400, 'o sistema não decide cobertura: negativa só com decisão/evidência da seguradora');
+}
+
+// =====================================================================
+section('Impressão da apólice: logotipo e modelo de impressão');
+const PNG1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+const dataUrl = (mime, buf) => `data:${mime};base64,${buf.toString('base64')}`;
+const PAGE = { paper: 'A4', orientation: 'portrait', margins: { top: 18, right: 16, bottom: 18, left: 16 } };
+const tdoc = (text) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }, { type: 'mergeField', attrs: { key: 'cliente.nome' } }] }, { type: 'dataTable', attrs: { source: 'parcelas', columns: ['numero', 'valor'] } }] });
+const broker2 = await (async () => {
+  const u = await call(T, 'POST', '/api/v1/company/users', { name: 'Corretor Impressão', email: `corretor-imp-${rnd}@teste.apolven`, role: 'broker' });
+  const l = await call(null, 'POST', '/api/auth/login', { email: `corretor-imp-${rnd}@teste.apolven`, password: u.data.temporary_password });
+  return l.data.token;
+})();
+{
+  const up = await call(T, 'PUT', '/api/v1/company/logo', { image: dataUrl('image/png', PNG1), thumb: dataUrl('image/png', PNG1) });
+  ok(up.status === 200 && up.data.mime === 'image/png', 'logotipo PNG aceito (assinatura conferida)', up.data);
+  const got = await call(T, 'GET', '/api/v1/company/logo');
+  ok(got.data.data_url?.startsWith('data:image/png;base64,'), 'logotipo devolvido para a impressão');
+  const svg = await call(T, 'PUT', '/api/v1/company/logo', { image: dataUrl('image/svg+xml', Buffer.from('<svg onload="alert(1)"/>')), thumb: dataUrl('image/png', PNG1) });
+  ok(svg.status === 400, 'SVG recusado');
+  const fake = await call(T, 'PUT', '/api/v1/company/logo', { image: dataUrl('image/png', Buffer.from('<svg onload="alert(1)"/>')), thumb: dataUrl('image/png', PNG1) });
+  ok(fake.status === 400, 'arquivo disfarçado de PNG recusado pela assinatura');
+  const lie = await call(T, 'PUT', '/api/v1/company/logo', { image: dataUrl('image/jpeg', PNG1), thumb: dataUrl('image/png', PNG1) });
+  ok(lie.status === 400, 'tipo declarado diferente do conteúdo recusado');
+  const big = await call(T, 'PUT', '/api/v1/company/logo', { image: dataUrl('image/png', Buffer.concat([PNG1, Buffer.alloc(1024 * 1024)])), thumb: dataUrl('image/png', PNG1) });
+  ok(big.status === 400, 'logotipo acima de 1 MB recusado', big.status);
+  const deny = await call(broker2, 'PUT', '/api/v1/company/logo', { image: dataUrl('image/png', PNG1), thumb: dataUrl('image/png', PNG1) });
+  ok(deny.status === 403, 'sem permissão de configurações não troca o logotipo', deny.status);
+
+  const s1 = await call(T, 'PUT', '/api/v1/print-templates/policy', { doc: tdoc('Olá '), header: null, footer: null, page: PAGE });
+  ok(s1.status === 200 && s1.data.template.version === 1, 'modelo de impressão salvo (validado no servidor)', s1.data);
+  const stale = await call(T, 'PUT', '/api/v1/print-templates/policy', { version: 99, doc: tdoc('x'), page: PAGE });
+  ok(stale.status === 409, 'edição simultânea do modelo detectada');
+  const bad = await call(T, 'PUT', '/api/v1/print-templates/policy', { doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x', marks: [{ type: 'link', attrs: { href: 'javascript:alert(1)' } }] }] }] }, page: PAGE });
+  ok(bad.status === 400, 'modelo com marca/HTML desconhecido recusado');
+  const ext = await call(T, 'PUT', '/api/v1/print-templates/policy', { doc: { type: 'doc', content: [{ type: 'image', attrs: { src: 'https://evil.example/x.png' } }] }, page: PAGE });
+  ok(ext.status === 400, 'imagem externa no modelo recusada');
+  const deny2 = await call(broker2, 'PUT', '/api/v1/print-templates/policy', { doc: tdoc('x'), page: PAGE });
+  ok(deny2.status === 403, 'sem permissão de configurações não altera o modelo');
+  const read = await call(T, 'GET', '/api/v1/print-templates/policy?branch=auto');
+  ok(read.status === 200 && read.data.source === 'padrao' && read.data.template.doc.content[0].content[0].text === 'Olá ', 'ramo sem modelo próprio usa o padrão da corretora');
+  const pd = await call(T, 'GET', `/api/v1/policies/${pol161.id}/print-data`);
+  ok(pd.status === 200 && pd.data.policy.policy_number === `P161-${rnd}` && pd.data.installments.length > 0 && pd.data.client.name === 'Ana Teste', 'dados da versão impressa da apólice', pd.data?.policy);
+  const pdB = await call(B.token, 'GET', `/api/v1/policies/${pol161.id}/print-data`);
+  ok(pdB.status === 404, 'outra corretora não lê a versão impressa');
+  const del = await call(T, 'DELETE', '/api/v1/print-templates/policy');
+  ok(del.status === 200 && del.data.removed, 'modelo removido (volta ao modelo de fábrica)');
+  const rm = await call(T, 'DELETE', '/api/v1/company/logo');
+  ok(rm.status === 200 && !(await call(T, 'GET', '/api/v1/company/logo')).data.data_url, 'logotipo removido');
+  const au = await call(T, 'GET', '/api/v1/reports/audit');
+  ok(['company.logo', 'company.logo_remove', 'print_template.create', 'print_template.delete'].every((a) => au.data.some((x) => x.action === a)), 'logotipo e modelo auditados');
+}
+
+// =====================================================================
+section('API de cotação — padrão APOLVEN (SSRF, credenciais, teste e etapa 5)');
+{
+  const inst = (await call(T, 'POST', '/api/v1/integrations/institutions', { kind: 'seguradora', name: `Seguradora API ${rnd}` })).data;
+  const conn = (await call(T, 'POST', '/api/v1/integrations/connections', { institution_id: inst.id, template_code: 'api_padrao_apolven', products: ['auto'], accreditation: 'sim', environment: 'producao' })).data;
+  ok(conn.id && conn.adapter_available, 'caminho "API de cotação — padrão APOLVEN" disponível para qualquer seguradora');
+  const cfgUrl = `/api/v1/integrations/connections/${conn.id}/api-config`;
+  const auth = { auth_type: 'bearer', secrets: { token: 'tok-123' }, mfa_code: totp(A.secret) };
+  for (const u of ['http://api.exemplo.com.br', 'https://169.254.169.254/latest', 'https://10.0.0.5', 'https://[fd00:ec2::254]/', 'https://metadata.google.internal', 'https://api.exemplo.com.br/?a=1', 'https://u:p@api.exemplo.com.br']) {
+    const r = await call(T, 'PUT', cfgUrl, { ...auth, base_url: u, mfa_code: totp(A.secret) });
+    ok(r.status === 400, `SSRF: endereço recusado no cadastro (${u})`, r.data);
+  }
+  const noAuth = await call(T, 'PUT', cfgUrl, { base_url: 'https://api.exemplo.com.br', auth_type: 'bearer', secrets: { token: 'x' }, mfa_code: '000000' });
+  ok(noAuth.status === 401, 'configurar a API exige reautenticação (MFA)');
+  const deny = await call(broker2, 'PUT', cfgUrl, { base_url: 'https://api.exemplo.com.br', auth_type: 'bearer', secrets: { token: 'x' } });
+  ok(deny.status === 403, 'corretor sem permissão de credenciais não configura a API');
+  // seguradora de teste local: só funciona se a API estiver com APOLVEN_ALLOW_LOCAL_API=1
+  const port = 4800 + Math.floor(Math.random() * 90);
+  const fake = spawn(process.execPath, ['scripts/fake-insurer.mjs', String(port)], { stdio: 'ignore' });
+  await new Promise((r) => setTimeout(r, 600));
+  try {
+    const local = await call(T, 'PUT', cfgUrl, { ...auth, base_url: `http://localhost:${port}/valida`, timeout_ms: 5000, mfa_code: totp(A.secret) });
+    if (local.status === 400) {
+      ok(local.data.code === 'URL_INVALID' || local.data.code === 'HOST_BLOCKED', 'sem APOLVEN_ALLOW_LOCAL_API, localhost é bloqueado');
+      console.log('  (API sem APOLVEN_ALLOW_LOCAL_API=1: etapa 5 com seguradora local não testada)');
+    } else {
+      ok(local.status === 200 && local.data.api_config.base_url.endsWith('/valida') && !JSON.stringify(local.data).includes('tok-123'), 'API configurada; segredo não volta ao navegador', local.data);
+      const det = await call(T, 'GET', `/api/v1/integrations/connections/${conn.id}`);
+      ok(!det.text.includes('tok-123') && det.data.credentials[0].public_info.autenticacao === 'Bearer token', 'detalhe da conexão sem segredo (mascarado)');
+      const tst = await call(T, 'POST', `/api/v1/integrations/connections/${conn.id}/connection-tests`, {});
+      ok(tst.data.results?.autenticacao === 'valida' && tst.data.auto_activated === true, 'teste aprovado ativa a cotação automática', tst.data);
+      const el = await call(T, 'GET', '/api/v1/catalog/eligible?branch=auto');
+      ok(el.data.eligible.some((e) => e.connection_id === conn.id && e.mode === 'automatica'), 'fonte com API testada é automática na etapa 4');
+      // credencial errada não autentica
+      const inst2 = (await call(T, 'POST', '/api/v1/integrations/institutions', { kind: 'seguradora', name: `Seguradora API Recusa ${rnd}` })).data;
+      const conn2 = (await call(T, 'POST', '/api/v1/integrations/connections', { institution_id: inst2.id, template_code: 'api_padrao_apolven', products: ['auto'], accreditation: 'sim', environment: 'producao' })).data;
+      await call(T, 'PUT', `/api/v1/integrations/connections/${conn2.id}/api-config`, { base_url: `http://localhost:${port}/recusa`, auth_type: 'oauth2_cc', token_url: `http://localhost:${port}/oauth/token`, secrets: { client_id: 'cli', client_secret: 'sec' }, mfa_code: totp(A.secret) });
+      const t2 = await call(T, 'POST', `/api/v1/integrations/connections/${conn2.id}/connection-tests`, {});
+      ok(t2.data.auto_activated === true, 'OAuth2 client credentials: token obtido e conexão aprovada', t2.data.results);
+      const r = await call(T, 'POST', '/api/v1/quote-requests', { client_id: ana.id, branch: 'auto', risk, min_coverages: minCov, sources: [conn.id, conn2.id], sharing_basis: 'pedido do cliente (smoke)' });
+      ok(r.status === 202 && r.data.eligible.every((e) => e.mode === 'automatica'), 'cotação enviada às fontes com API');
+      let view = null;
+      for (let i = 0; i < 5; i += 1) {
+        view = (await call(T, 'POST', `/api/v1/quote-requests/${r.data.request.id}/rounds/${r.data.round.id}/run`)).data;
+        if (!view.tasks.some((t) => ['aguardando', 'executando'].includes(t.status))) break;
+      }
+      const tOk = view.tasks.find((t) => t.connection_id === conn.id);
+      const tRec = view.tasks.find((t) => t.connection_id === conn2.id);
+      const off = view.offers.find((o) => o.task_id === tOk.id);
+      ok(tOk.status === 'cotacao_valida' && off?.origin === 'api' && off.total_premium_cents > 0 && off.api_call_id, 'oferta da API registrada na rodada (origem API, resposta guardada)', [tOk, off]);
+      ok(tRec.status === 'recusa_informada' && /pernoite/.test(tRec.reason) && tRec.protocol === 'REC-778', 'recusa expressa da API com motivo e protocolo');
+      const calls = await call(T, 'GET', `/api/v1/quote-requests/tasks/${tOk.id}/api-calls`);
+      ok(calls.data[0]?.fields_sent.includes('segurado.documento') && !calls.text.includes('ana@teste.com') && calls.data[0].sharing_basis === 'pedido do cliente (smoke)' && calls.data[0].response_raw?.ofertas,
+        'trilha: quais dados foram para qual seguradora, base e resposta original', calls.data[0]);
+      const au = await call(T, 'GET', '/api/v1/reports/audit');
+      ok(au.data.some((x) => x.action === 'quote.api_send' && x.summary.includes(inst.name)) && au.data.some((x) => x.action === 'integration.api_config') && !au.text.includes('tok-123'), 'envio por API e configuração auditados sem segredo');
+      const cmp = await call(T, 'POST', '/api/v1/comparisons', { round_id: r.data.round.id, offer_ids: [off.id] });
+      ok(cmp.status === 201, 'oferta da API vai para o comparativo do cliente (fluxo existente)');
+      const pub = await call(T, 'GET', `/api/v1/comparisons/${cmp.data.id}`);
+      ok(!JSON.stringify(pub.data.view).includes('response_raw') && !JSON.stringify(pub.data.view).includes('ofertas'), 'comparativo do cliente sem resposta original da API');
+      const bTask = await call(B.token, 'GET', `/api/v1/quote-requests/tasks/${tOk.id}/api-calls`);
+      ok(bTask.status === 404, 'outra corretora não lê a trilha da API');
+    }
+  } finally { fake.kill(); }
 }
 
 // =====================================================================
