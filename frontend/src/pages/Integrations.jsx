@@ -17,6 +17,8 @@ import {
 import {
   CAPABILITY_STATE, TECH_STATE, COMMERCIAL_STATE, REQ_STATUS, ENV_LABEL, BRANCHES, fmt, fmtDateTime, ago, maskDoc,
 } from '../lib/format';
+import QuoteApiConfig from '../components/QuoteApiConfig';
+import QuoteApiContract from '../components/QuoteApiContract';
 
 // ---------------- Dicionários locais ----------------
 const T = {
@@ -69,6 +71,7 @@ const SECTIONS = [
   { value: 'adicionar', label: 'Adicionar empresa' },
   { value: 'pendencias', label: 'Pendências' },
   { value: 'historico', label: 'Histórico e sincronizações' },
+  { value: 'contrato', label: 'Contrato da API' },
 ];
 
 // =====================================================================================
@@ -95,6 +98,7 @@ export default function Integrations() {
       {tab === 'minhas' && <MyCompanies onAdd={() => go('adicionar')} onHistory={(id) => go('historico', { connection_id: id })} />}
       {tab === 'adicionar' && <AddCompany />}
       {tab === 'pendencias' && <Pendencias />}
+      {tab === 'contrato' && <QuoteApiContract />}
       {tab === 'historico' && <HistoryTab connectionId={sp.get('connection_id') || ''} onConnection={(id) => go('historico', id ? { connection_id: id } : {})} />}
       <Modal open={help} onClose={() => setHelp(false)} title="Ajuda para credenciamento" subtitle="Respostas rápidas para as dúvidas mais comuns" size="lg">
         <HelpPanel onNavigate={(t) => { setHelp(false); go(t); }} />
@@ -301,7 +305,7 @@ function AddCompany() {
       {created && (
         <Notice tone="ok">
           <b>{created.name}</b> foi cadastrada pela corretora como <b>cadastro comercial/assistido</b>. Nenhuma API foi conectada e os dados não foram validados pela plataforma.
-          Escolha abaixo o caminho “Operação assistida” e, se quiser, solicite avaliação de integração.
+          Escolha abaixo o caminho “Operação assistida” — ou “API de cotação — padrão APOLVEN”, se ela oferecer uma API nesse padrão.
         </Notice>
       )}
       {loading && !data ? <Loading /> : !data?.institutions?.length ? (
@@ -365,7 +369,18 @@ function AddCompany() {
       )}
       {pick && <AddWizard inst={pick.inst} initialPath={pick.path} onClose={() => { setPick(null); reload(); }} />}
       <NewInstitutionModal open={newInst} onClose={() => setNewInst(false)}
-        onDone={(i) => { setNewInst(false); setCreated(i); setTerm(i.name); }} />
+        onDone={async (i, opts) => {
+          setNewInst(false); setCreated(i); setTerm(i.name);
+          if (opts?.api) {
+            // "tem API de cotação": abre direto o caminho da API no padrão APOLVEN
+            try {
+              const cat = await api.get(`/v1/integrations/catalog${qs({ q: i.name })}`);
+              const inst = cat.institutions.find((x) => x.id === i.id);
+              const path = inst?.paths.find((x) => x.api_config);
+              if (inst && path) setPick({ inst, path });
+            } catch { /* a lista abaixo continua disponível */ }
+          }
+        }} />
     </div>
   );
 }
@@ -410,7 +425,7 @@ function AddWizard({ inst, initialPath, onClose }) {
   const needsPartner = path.method === 'multicalculo_parceiro' && inst.kind !== 'parceiro_tecnologico';
   const { data: conns } = useFetch(() => (needsPartner ? api.get('/v1/integrations/connections') : Promise.resolve([])), [needsPartner]);
   const partners = (conns || []).filter((c) => c.institution_kind === 'parceiro_tecnologico' && !c.revoked_at && c.method === 'multicalculo_parceiro');
-  const [v, setV] = useState({ unit_id: '', products: [], accreditation: 'nao', environment: 'testes', broker_code: '', partner_connection_id: '', notes: '' });
+  const [v, setV] = useState({ unit_id: '', products: [], accreditation: initialPath.api_config ? 'sim' : 'nao', environment: initialPath.api_config ? 'producao' : 'testes', broker_code: '', partner_connection_id: '', notes: '' });
   const [exists, setExists] = useState(null);
   const allowed = path.products?.length ? path.products : Object.keys(BRANCHES);
   useEffect(() => { setV((x) => ({ ...x, products: x.products.filter((p) => allowed.includes(p)) })); setExists(null); }, [code]); // eslint-disable-line
@@ -428,8 +443,8 @@ function AddWizard({ inst, initialPath, onClose }) {
       return false;
     });
     if (r === FAIL) return;
-    toast(r.message || 'Empresa adicionada. Continue pelos requisitos.');
-    navigate(`/integracoes/${r.id}`);
+    toast(r.message || (path.api_config ? 'Empresa adicionada. Configure a API de cotação.' : 'Empresa adicionada. Continue pelos requisitos.'));
+    navigate(`/integracoes/${r.id}${path.api_config ? '?etapa=3' : ''}`);
   };
 
   return (
@@ -456,6 +471,12 @@ function AddWizard({ inst, initialPath, onClose }) {
           </div>
         </fieldset>
 
+        {path.api_config && (
+          <Notice tone="info">
+            <b>API de cotação no padrão APOLVEN.</b> Na próxima etapa você informa o endereço https da API, a autenticação e as credenciais e testa a conexão.
+            Com credenciamento confirmado e ambiente de produção, a seguradora passa a ser consultada automaticamente nas cotações.
+          </Notice>
+        )}
         {!auto && (
           <Notice tone="warn">
             <b>Esta empresa ainda não possui integração automática disponível neste sistema por este caminho.</b> O cadastro será salvo para
@@ -525,7 +546,7 @@ function AddWizard({ inst, initialPath, onClose }) {
 
 function NewInstitutionModal({ open, onClose, onDone }) {
   const [run, busy] = useAction();
-  const blank = { kind: 'seguradora', name: '', legal_name: '', cnpj: '', official_code: '', assistance_phone: '', contact: '', branches: [] };
+  const blank = { kind: 'seguradora', name: '', legal_name: '', cnpj: '', official_code: '', assistance_phone: '', contact: '', branches: [], has_api: false };
   const [v, setV] = useState(blank);
   useEffect(() => { if (open) setV(blank); }, [open]); // eslint-disable-line
   const submit = async () => {
@@ -533,8 +554,8 @@ function NewInstitutionModal({ open, onClose, onDone }) {
       kind: v.kind, name: v.name.trim(), legal_name: v.legal_name.trim() || null, cnpj: v.cnpj.trim() || null, official_code: v.official_code.trim() || null,
       assistance_phone: v.assistance_phone.trim() || null, contact: v.contact.trim() || null, branches: v.branches,
     };
-    const r = await run(() => api.post('/v1/integrations/institutions', body), 'Cadastro assistido salvo. Nenhuma API foi conectada.');
-    if (r !== FAIL) onDone(r);
+    const r = await run(() => api.post('/v1/integrations/institutions', body), v.has_api ? 'Empresa cadastrada. Agora configure a API de cotação.' : 'Cadastro assistido salvo. Nenhuma API foi conectada.');
+    if (r !== FAIL) onDone(r, { api: v.has_api && v.kind !== 'parceiro_tecnologico' });
   };
   return (
     <Modal open={open} onClose={onClose} size="lg" title="Cadastrar empresa não encontrada"
@@ -566,6 +587,10 @@ function NewInstitutionModal({ open, onClose, onDone }) {
             ))}
           </div>
         </fieldset>
+        {v.kind !== 'parceiro_tecnologico' && (
+          <Toggle checked={v.has_api} onChange={(x) => setV({ ...v, has_api: x })} label="Esta empresa tem API de cotação (padrão APOLVEN)"
+            hint="Ao salvar, abre a configuração da API: endereço https, autenticação e teste. Sem API, as cotações seguem assistidas." />
+        )}
       </div>
     </Modal>
   );
@@ -742,7 +767,9 @@ function stepStatus(c) {
   return {
     1: { done: true, text: 'Cadastro salvo' },
     2: { done: req.length > 0 ? ok === req.length : true, text: req.length ? `${ok} de ${req.length} obrigatório(s) confirmado(s)` : 'Sem requisitos obrigatórios' },
-    3: !c.adapter_available ? { done: null, text: 'Não se aplica (assistida)' } : { done: !!cred, text: cred ? `Configurada · versão ${cred.version}` : 'Aguardando credencial' },
+    3: !c.adapter_available ? { done: null, text: 'Não se aplica (assistida)' }
+      : c.template?.api_config ? { done: !!(cred && c.api_config), text: cred && c.api_config ? 'API de cotação configurada' : 'Configurar API de cotação' }
+        : { done: !!cred, text: cred ? `Configurada · versão ${cred.version}` : 'Aguardando credencial' },
     4: !c.adapter_available ? { done: null, text: 'Não se aplica (assistida)' } : { done: last?.results?.autenticacao === 'valida', text: last ? `Último: ${R_AUTH[last.results?.autenticacao]?.label || last.status} (${fmt(last.created_at)})` : 'Não executado' },
     5: !c.adapter_available ? { done: null, text: 'Sem funções automáticas' } : { done: active.length > 0, text: active.length ? `${active.length} ativa(s)` : validated.length ? `${validated.length} validada(s), nenhuma ativa` : 'Nenhuma ativa' },
   };
@@ -754,6 +781,7 @@ export function ConnectionDetail() {
   const navigate = useNavigate();
   const { can } = useAuth();
   const manage = can('integrations_manage');
+  const { toast } = useUI();
   const { data: c, loading, reload } = useFetch(() => api.get(`/v1/integrations/connections/${id}`), [id]);
   const [run, busy] = useAction();
   const [pause, setPause] = useState(false);
@@ -777,6 +805,8 @@ export function ConnectionDetail() {
   const test = async () => {
     const r = await run(() => api.post(`/v1/integrations/connections/${c.id}/connection-tests`, {}));
     if (r === FAIL) return;
+    if (r.auto_activated) toast(c.environment === 'producao' ? 'Conexão aprovada: a cotação automática desta seguradora está ativa.' : 'Conexão aprovada (ambiente de testes: não entra no multicálculo real).');
+    else if (r.results?.autenticacao === 'valida' && r.activation_blockers?.length) toast(`Conexão aprovada. Falta para ativar: ${r.activation_blockers.join('; ')}.`, 'error');
     await reload();
     setStep(4);
   };
@@ -833,7 +863,9 @@ export function ConnectionDetail() {
       <div className="mb-4">
         {step === 1 && <Step1 c={c} reload={reload} readOnly={readOnly} />}
         {step === 2 && <Step2 c={c} reload={reload} readOnly={readOnly} />}
-        {step === 3 && <Step3 c={c} reload={reload} readOnly={readOnly || !can('credentials_manage')} onDone={() => setStep(4)} />}
+        {step === 3 && (c.template?.api_config
+          ? <QuoteApiConfig c={c} reload={reload} readOnly={readOnly || !can('credentials_manage')} onTest={manage && !readOnly ? test : null} testing={busy} />
+          : <Step3 c={c} reload={reload} readOnly={readOnly || !can('credentials_manage')} onDone={() => setStep(4)} />)}
         {step === 4 && <Step4 c={c} reload={reload} readOnly={readOnly} onTest={test} busy={busy} />}
         {step === 5 && <Step5 c={c} reload={reload} readOnly={readOnly} />}
       </div>
