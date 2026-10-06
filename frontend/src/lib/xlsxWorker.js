@@ -1,6 +1,7 @@
-// Leitura de planilhas (XLSX/XLS/ODS) num Web Worker: o arquivo vem da seguradora e é processado
-// isolado da página (a biblioteca roda fora do contexto da aplicação). Devolve linhas como texto.
-import { read, utils } from 'xlsx';
+// Leitura de planilhas XLSX num Web Worker: o arquivo vem da seguradora e é processado
+// isolado da página. Usa read-excel-file (mantida, sem as falhas conhecidas da SheetJS do npm).
+// Devolve a primeira aba como matriz de textos.
+import { readSheet } from 'read-excel-file/web-worker';
 
 const iso = (d) => new Date(d.getTime() + 12 * 3600e3).toISOString().slice(0, 10);
 const cell = (v) => {
@@ -10,12 +11,10 @@ const cell = (v) => {
   return String(v).trim();
 };
 
-self.onmessage = (e) => {
+self.onmessage = async (e) => {
   try {
-    const wb = read(e.data, { type: 'array', cellDates: true, dense: true, cellFormula: false, cellHTML: false, cellStyles: false });
-    const name = wb.SheetNames[0];
-    const rows = utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: '', blankrows: false });
-    self.postMessage({ ok: true, sheet: name, rows: rows.slice(0, 20002).map((r) => r.map(cell)) });
+    const rows = await readSheet(e.data);
+    self.postMessage({ ok: true, rows: (rows || []).slice(0, 20002).map((r) => (r || []).map(cell)) });
   } catch (err) {
     self.postMessage({ ok: false, error: String(err?.message || err) });
   }

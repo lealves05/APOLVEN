@@ -69,7 +69,9 @@ export function xlsxRows(file) {
   });
 }
 
-export const isSheet = (name) => /\.(xlsx|xlsm|xls|ods)$/i.test(name || '');
+export const isSheet = (name) => /\.(xlsx|xlsm)$/i.test(name || '');
+/** Formatos de planilha antigos/alternativos que não lemos: pedir XLSX ou CSV. */
+export const isOldSheet = (name) => /\.(xls|ods|xlsb)$/i.test(name || '');
 
 /** Linha de cabeçalho: a primeira (entre as 15 iniciais) com ao menos 2 células preenchidas e algum nome conhecido. */
 export function splitHeader(rows) {

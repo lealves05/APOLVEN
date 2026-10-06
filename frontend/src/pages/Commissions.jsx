@@ -14,7 +14,7 @@ import {
   useFetch, useAction, FAIL, cx, SubmitButton, Hint,
 } from '../components/ui';
 import { useTable, SortTh, Pager } from '../components/Table';
-import { STATEMENT_FIELDS, csvRows, xlsxRows, isSheet, splitHeader, guessMapping, isNativeCsv, toCanonicalCsv, TEMPLATE_CSV } from '../lib/statement';
+import { STATEMENT_FIELDS, csvRows, xlsxRows, isSheet, isOldSheet, splitHeader, guessMapping, isNativeCsv, toCanonicalCsv, TEMPLATE_CSV } from '../lib/statement';
 
 const TABS = [
   { value: 'a_receber', label: 'A receber' },
@@ -730,6 +730,7 @@ function ImportStatement({ institutions, onClose, onDone }) {
   const load = async (fl) => {
     setReadErr(null); setPreview(null); setSummary(null); setReading(true);
     try {
+      if (isOldSheet(fl.name)) throw new Error('Este formato de planilha (.xls/.ods) não é lido aqui. No Excel, use “Salvar como” → Pasta de Trabalho do Excel (.xlsx) ou CSV.');
       const sheet = isSheet(fl.name);
       const text = sheet ? null : await fileToText(fl);
       const rows = sheet ? await xlsxRows(fl) : csvRows(text);
@@ -796,10 +797,10 @@ function ImportStatement({ institutions, onClose, onDone }) {
               </Select>
               <div>
                 <span className="label">Arquivo do extrato</span>
-                <FileButton accept=".csv,.txt,text/csv,.xlsx,.xlsm,.xls,.ods,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onFile={load}>
+                <FileButton accept=".csv,.txt,text/csv,.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onFile={load}>
                   {reading ? <Spinner className="h-4 w-4" /> : <FileSpreadsheet className="h-4 w-4" />} {raw ? raw.filename : 'Escolher CSV ou planilha (XLSX)'}
                 </FileButton>
-                <span className="mt-1 block text-xs text-ink-faint">Aceita o arquivo como a seguradora envia: CSV (; ou ,) ou Excel.</span>
+                <span className="mt-1 block text-xs text-ink-faint">Aceita o arquivo como a seguradora envia: CSV (; ou ,) ou Excel (.xlsx).</span>
               </div>
             </div>
             {readErr && <Notice tone="danger">{readErr}</Notice>}
