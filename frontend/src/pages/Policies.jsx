@@ -1,7 +1,7 @@
 // Apólices e certificados (10), endossos e cancelamentos (11), renovação (12), parcelas do prêmio (13),
 // plano de comissão (14) e vínculo de repasses (15) por contrato.
 // Estado contratual, estado documental e situação financeira são exibidos separadamente.
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Plus, Search, FileCheck2, Pencil, Download, Link2, MessageCircle, CreditCard, Bell, RefreshCw, Trash2, Upload,
@@ -19,6 +19,8 @@ import { SubmitButton,
   StatusChip, Notice, Empty, Loading, Spinner, cx, useFetch, useAction, FAIL,
 } from '../components/ui';
 import { useTable, SortTh, Pager } from '../components/Table';
+
+const PolicyPrintTab = lazy(() => import('../components/PolicyPrintTab'));
 
 // ---------------- Dicionários locais ----------------
 const C = {
@@ -567,7 +569,7 @@ export function PolicyDetail() {
   if (!p) return <Empty title="Apólice não encontrada" action={<Link to="/apolices" className="btn-outline">Voltar</Link>} />;
 
   const tabs = [
-    { value: 'resumo', label: 'Resumo' }, { value: 'itens', label: `Itens (${p.items.length})` }, { value: 'parcelas', label: `Parcelas do seguro (${p.installments.length})` },
+    { value: 'resumo', label: 'Resumo' }, { value: 'impressa', label: 'Versão impressa' }, { value: 'itens', label: `Itens (${p.items.length})` }, { value: 'parcelas', label: `Parcelas do seguro (${p.installments.length})` },
     p.commissions !== null && { value: 'comissao', label: 'Comissão' }, p.splits !== null && { value: 'repasses', label: 'Repasses' },
     { value: 'endossos', label: `Endossos (${p.endorsements.length})` }, { value: 'cancelamento', label: 'Cancelamento' },
     { value: 'sinistros', label: `Sinistros (${p.claims.length})` }, { value: 'documentos', label: 'Documentos' }, { value: 'versoes', label: 'Versões' }, { value: 'renovacao', label: 'Renovação' },
@@ -619,6 +621,7 @@ export function PolicyDetail() {
 
       <Tabs tabs={tabs} value={tab} onChange={setTab} />
       {tab === 'resumo' && <SummaryTab p={p} onEndorse={() => setTab('endossos')} />}
+      {tab === 'impressa' && <Suspense fallback={<Loading />}><PolicyPrintTab p={p} /></Suspense>}
       {tab === 'itens' && <ItemsTab p={p} reload={reload} />}
       {tab === 'parcelas' && <InstallmentsTab p={p} reload={reload} />}
       {tab === 'comissao' && p.commissions !== null && <CommissionTab p={p} reload={reload} />}
