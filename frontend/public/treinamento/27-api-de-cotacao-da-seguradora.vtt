@@ -1,0 +1,141 @@
+WEBVTT
+
+1
+00:00:00.724 --> 00:00:07.097
+Aula 27. API de cotação da seguradora: do pedido de acesso à cotação automática.
+
+2
+00:00:08.724 --> 00:00:16.078
+Com a API de cotação, o APOLVEN consulta a seguradora sozinho e recebe as ofertas em segundos, sem digitação.
+
+3
+00:00:16.124 --> 00:00:23.414
+Sem API, a consulta é assistida: a equipe pede pelo canal oficial e registra a resposta. As duas convivem.
+
+4
+00:00:23.924 --> 00:00:31.104
+Peça à seguradora, ou ao parceiro de integração: o credenciamento da corretora e o acesso ao portal do desenvolvedor.
+
+5
+00:00:31.124 --> 00:00:39.267
+Lá ficam as credenciais de homologação e de produção, a URL base da API, a URL do token e os escopos liberados.
+
+6
+00:00:39.724 --> 00:00:49.275
+A maioria das seguradoras usa OAuth2 com client credentials: o APOLVEN envia o Client ID e o Client Secret e recebe um token de acesso.
+
+7
+00:00:49.324 --> 00:00:56.059
+Com o token, válido por exemplo por uma hora, ele chama a API de cotação. Quando vence, pede outro sozinho.
+
+8
+00:00:59.524 --> 00:01:04.904
+As credenciais ficam no portal do desenvolvedor da seguradora, aqui um portal fictício.
+
+9
+00:01:04.924 --> 00:01:13.025
+Homologação é o ambiente de testes; produção, o das cotações reais. Cada um tem o seu Client ID e o seu Client Secret.
+
+10
+00:01:17.524 --> 00:01:25.433
+Este é o Client ID. O Client Secret aparece uma única vez, ao ser gerado: guarde com cuidado, ele vale como uma senha.
+
+11
+00:01:26.524 --> 00:01:32.363
+Anote também a URL do token, a URL base da API e o escopo, aqui “cotacao”.
+
+12
+00:01:36.424 --> 00:01:44.397
+Agora, no APOLVEN: Seguradoras e integrações, Adicionar empresa. Pesquise a seguradora; se ela não estiver no catálogo, cadastre.
+
+13
+00:01:49.424 --> 00:01:53.685
+Informe o nome e marque: “Esta empresa tem API de cotação”.
+
+14
+00:01:58.024 --> 00:02:02.327
+O caminho “API de cotação, padrão APOLVEN” já vem escolhido.
+
+15
+00:02:04.524 --> 00:02:10.726
+Confira o ambiente, produção, o credenciamento e marque os ramos que a seguradora cota pela API.
+
+16
+00:02:15.724 --> 00:02:21.819
+Na etapa 3 fica a API de cotação. Cole a URL base, sempre com https.
+
+17
+00:02:24.724 --> 00:02:31.161
+Em Autenticação, escolha OAuth2 client credentials e informe a URL do token e o escopo.
+
+18
+00:02:34.324 --> 00:02:39.651
+Digite o Client ID e o Client Secret. O secret fica mascarado na tela.
+
+19
+00:02:44.524 --> 00:02:51.814
+Defina o tempo máximo, confirme com a sua senha e salve. As credenciais vão cifradas e nunca mais voltam para a tela.
+
+20
+00:02:56.724 --> 00:03:02.704
+Clique em Testar conexão. Aqui, um erro comum: o servidor de autorização recusou as credenciais.
+
+21
+00:03:02.724 --> 00:03:08.393
+Quase sempre é o secret digitado errado, de outro ambiente, ou já substituído no portal.
+
+22
+00:03:16.824 --> 00:03:21.597
+Para corrigir, volte à etapa 3, digite o secret correto e salve de novo.
+
+23
+00:03:26.124 --> 00:03:33.179
+Conexão aprovada: o token foi obtido, a API respondeu no padrão e a cotação automática foi ativada.
+
+24
+00:03:37.024 --> 00:03:41.477
+Vamos cotar. Em Nova cotação, escolha o cliente e o ramo, como de costume.
+
+25
+00:03:50.624 --> 00:03:54.159
+Preencha os dados do risco e as coberturas desejadas.
+
+26
+00:03:55.224 --> 00:04:02.941
+Na etapa 4, a Seguradora Exemplo já aparece como automática, ao lado das outras fontes: automáticas ou assistidas.
+
+27
+00:04:04.724 --> 00:04:09.582
+Informe a base para compartilhar os dados, exigida pela LGPD, e envie.
+
+28
+00:04:11.124 --> 00:04:19.822
+Na etapa 5, Resultados, cada seguradora aparece com a situação ao vivo: consultando, cotação recebida, valor indicativo, recusa ou erro.
+
+29
+00:04:22.424 --> 00:04:30.674
+A Seguradora Exemplo respondeu pela API: a oferta entra na comparação na hora. As assistidas aparecem quando a equipe registrar.
+
+30
+00:04:33.724 --> 00:04:41.014
+Em “Dados enviados e resposta” você vê quais dados foram para a seguradora e a resposta original. Só a equipe vê isso.
+
+31
+00:04:47.124 --> 00:04:53.390
+Escolha a melhor opção e gere o link do comparativo, pronto para enviar ao cliente pelo WhatsApp ou e-mail.
+
+32
+00:04:56.824 --> 00:05:05.330
+Por fim, a aba Contrato da API: é o que você envia à seguradora, ao parceiro ou ao integrador, com endereços, autenticação e regras.
+
+33
+00:05:07.324 --> 00:05:12.865
+Os JSON Schemas e os exemplos de requisição e resposta estão aqui, para copiar ou baixar.
+
+34
+00:05:12.924 --> 00:05:20.257
+Segurança: só https público, credenciais cifradas, apenas os dados necessários e cada envio na auditoria.
+
+35
+00:05:20.824 --> 00:05:25.042
+Pronto: a sua seguradora com API já cota automaticamente.

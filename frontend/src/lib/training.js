@@ -380,6 +380,24 @@ export const LESSONS = [
     "text": "Em Seguradoras e integrações você cadastra as seguradoras e parceiros com quem a corretora trabalha. Pesquise a empresa e escolha o caminho: API da seguradora, plataforma de multicálculo, arquivos oficiais ou atendimento assistido. A configuração tem cinco etapas, e o progresso mostra exatamente o que falta. Os dados da corretora são reaproveitados do cadastro: razão social, CNPJ e registro SUSEP. O checklist lista os requisitos e documentos do credenciamento. Prepare o texto da solicitação de acesso e registre o protocolo. Com o credenciamento aprovado, você informa as credenciais. Elas são guardadas cifradas e nunca voltam para a tela. Depois do teste de conexão, cada função é ativada separadamente: cotação, transmissão, parcelas. Enquanto isso não acontece, o trabalho continua no modo assistido, sem nenhum resultado simulado."
   },
   {
+    "n": 27,
+    "file": "27-api-de-cotacao-da-seguradora",
+    "mod": "cadastros",
+    "s": 326,
+    "title": "API de cotação da seguradora",
+    "routes": [
+      "/integracoes/"
+    ],
+    "desc": "Do pedido de acesso à cotação automática: OAuth2, teste de conexão, resultados ao vivo e contrato da API.",
+    "learn": [
+      "O que pedir à seguradora (credenciais, URLs, ambientes)",
+      "Configurar OAuth2 e testar a conexão",
+      "Cotar automaticamente e acompanhar os resultados",
+      "Contrato da API, segurança e LGPD"
+    ],
+    "text": "Com a API de cotação, o APOLVEN consulta a seguradora sozinho e recebe as ofertas em segundos, sem digitação. Sem API, a consulta é assistida: a equipe pede pelo canal oficial e registra a resposta. As duas convivem. Peça à seguradora, ou ao parceiro de integração: o credenciamento da corretora e o acesso ao portal do desenvolvedor. Lá ficam as credenciais de homologação e de produção, a URL base da API, a URL do token e os escopos liberados. A maioria das seguradoras usa OAuth2 com client credentials: o APOLVEN envia o Client ID e o Client Secret e recebe um token de acesso. Com o token, válido por exemplo por uma hora, ele chama a API de cotação. Quando vence, pede outro sozinho. As credenciais ficam no portal do desenvolvedor da seguradora, aqui um portal fictício. Homologação é o ambiente de testes; produção, o das cotações reais. Cada um tem o seu Client ID e o seu Client Secret. Este é o Client ID. O Client Secret aparece uma única vez, ao ser gerado: guarde com cuidado, ele vale como uma senha. Anote também a URL do token, a URL base da API e o escopo, aqui “cotacao”. Agora, no APOLVEN: Seguradoras e integrações, Adicionar empresa. Pesquise a seguradora; se ela não estiver no catálogo, cadastre. Informe o nome e marque: “Esta empresa tem API de cotação”. O caminho “API de cotação, padrão APOLVEN” já vem escolhido. Confira o ambiente, produção, o credenciamento e marque os ramos que a seguradora cota pela API. Na etapa 3 fica a API de cotação. Cole a URL base, sempre com https. Em Autenticação, escolha OAuth2 client credentials e informe a URL do token e o escopo. Digite o Client ID e o Client Secret. O secret fica mascarado na tela. Defina o tempo máximo, confirme com a sua senha e salve. As credenciais vão cifradas e nunca mais voltam para a tela. Clique em Testar conexão. Aqui, um erro comum: o servidor de autorização recusou as credenciais. Quase sempre é o secret digitado errado, de outro ambiente, ou já substituído no portal. Para corrigir, volte à etapa 3, digite o secret correto e salve de novo. Conexão aprovada: o token foi obtido, a API respondeu no padrão e a cotação automática foi ativada. Vamos cotar. Em Nova cotação, escolha o cliente e o ramo, como de costume. Preencha os dados do risco e as coberturas desejadas. Na etapa 4, a Seguradora Exemplo já aparece como automática, ao lado das outras fontes: automáticas ou assistidas. Informe a base para compartilhar os dados, exigida pela LGPD, e envie. Na etapa 5, Resultados, cada seguradora aparece com a situação ao vivo: consultando, cotação recebida, valor indicativo, recusa ou erro. A Seguradora Exemplo respondeu pela API: a oferta entra na comparação na hora. As assistidas aparecem quando a equipe registrar. Em “Dados enviados e resposta” você vê quais dados foram para a seguradora e a resposta original. Só a equipe vê isso. Escolha a melhor opção e gere o link do comparativo, pronto para enviar ao cliente pelo WhatsApp ou e-mail. Por fim, a aba Contrato da API: é o que você envia à seguradora, ao parceiro ou ao integrador, com endereços, autenticação e regras. Os JSON Schemas e os exemplos de requisição e resposta estão aqui, para copiar ou baixar. Segurança: só https público, credenciais cifradas, apenas os dados necessários e cada envio na auditoria. Pronto: a sua seguradora com API já cota automaticamente."
+  },
+  {
     "n": 20,
     "file": "20-produtos-e-documentos",
     "mod": "cadastros",
@@ -485,7 +503,7 @@ export const LESSONS = [
   }
 ];
 
-export const TOTAL_SECONDS = 1542;
+export const TOTAL_SECONDS = 1868;
 
 const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 export const videoUrl = (l) => `${base}/treinamento/${l.file}.mp4`;
