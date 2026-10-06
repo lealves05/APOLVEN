@@ -2,8 +2,9 @@
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Calculator, UserPlus, Send, FileCheck2, RefreshCw, Receipt, Siren, Wallet, HandCoins, CalendarDays, Target, AlertTriangle, ChevronRight, Clock, ExternalLink,
-  FileWarning, Inbox,
+  FileWarning, Inbox, CheckCircle2, Circle, X, Eye, EyeOff,
 } from 'lucide-react';
+import { useState } from 'react';
 import { api } from '../lib/api';
 import { money, num, fmtDateTime, PRIORITY } from '../lib/format';
 import { useAuth } from '../context/AuthContext';
@@ -18,7 +19,10 @@ function greeting() {
 }
 
 /** Cartão numérico clicável. tone: 'warn' | 'danger' quando há algo a fazer. */
+const isZero = (v) => /^(R\$\s*)?0(,00)?$/.test(String(v ?? '').replace(/\u00a0/g, ' ').trim());
+
 function Card({ to, label, value, hint, icon: Icon, tone }) {
+  const zc = isZero(value) && !tone ? 'dash-zero' : 'dash-nz';
   const t = tone === 'danger' ? 'text-red-600 dark:text-red-400' : tone === 'warn' ? 'text-amber-600 dark:text-amber-400' : 'text-ink-faint';
   const body = (
     <>
@@ -30,9 +34,9 @@ function Card({ to, label, value, hint, icon: Icon, tone }) {
       {hint && <div className={cx('mt-0.5 text-xs', tone ? t : 'text-ink-faint')}>{hint}</div>}
     </>
   );
-  if (!to) return <div className="card p-4">{body}</div>;
+  if (!to) return <div className={cx('card p-4', zc)}>{body}</div>;
   return (
-    <Link to={to} className="card group block p-4 transition hover:shadow-soft focus-visible:ring-2 focus-visible:ring-primary">
+    <Link to={to} className={cx('card group block p-4 transition hover:shadow-soft focus-visible:ring-2 focus-visible:ring-primary', zc)}>
       {body}
       <span className="mt-2 inline-flex items-center text-xs text-primary opacity-80 group-hover:opacity-100">Ver detalhes <ChevronRight className="h-3.5 w-3.5" /></span>
     </Link>
@@ -41,7 +45,7 @@ function Card({ to, label, value, hint, icon: Icon, tone }) {
 
 function Group({ title, subtitle, children }) {
   return (
-    <section>
+    <section className="dash-group">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold">{title}</h2>
         {subtitle && <p className="text-xs text-ink-faint">{subtitle}</p>}
@@ -81,12 +85,59 @@ function MyTasks({ tasks }) {
   );
 }
 
+/** Primeiros passos: aparece até tudo estar feito ou a pessoa ocultar. */
+function SetupChecklist({ setup, onHide }) {
+  const { can } = useAuth();
+  const steps = [
+    { key: 'insurers', done: setup.insurers > 0, title: 'Cadastre as seguradoras com que você trabalha', text: 'Credenciamento e forma de consulta (automática ou assistida). Sem isso a cotação não tem para quem perguntar.', to: '/integracoes', cta: 'Seguradoras', show: can('integrations_view') },
+    { key: 'agreements', done: setup.agreements > 0, title: 'Informe os acordos de comissão', text: 'Percentual e calendário de cada seguradora/ramo, para prever o que você tem a receber.', to: '/comissoes?tab=acordos', cta: 'Acordos', show: can('commissions_view') },
+    { key: 'clients', done: setup.clients > 0, title: 'Cadastre ou importe seus clientes', text: 'Um a um ou por planilha (Documentos e importações).', to: '/clientes?novo=1', cta: 'Novo cliente', show: can('clients_view') },
+    { key: 'users', done: setup.users > 1, title: 'Convide sua equipe (opcional)', text: 'Produtores, financeiro e emissão, cada um com o seu perfil de acesso.', to: '/configuracoes', cta: 'Equipe', show: can('users', 'settings') },
+    { key: 'quotes', done: setup.quotes > 0, title: 'Faça a primeira cotação', text: 'Questionário do risco → respostas das seguradoras → comparativo para o cliente escolher pelo celular.', to: '/cotacoes/nova', cta: 'Nova cotação', show: can('quotes_manage') },
+  ].filter((x) => x.show);
+  const done = steps.filter((x) => x.done).length;
+  if (!steps.length || done === steps.length) return null;
+  const pctDone = Math.round((done / steps.length) * 100);
+  return (
+    <section className="card mb-6 overflow-hidden" aria-labelledby="setup-t">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3">
+        <div>
+          <h2 id="setup-t" className="text-sm font-semibold">Configure sua corretora</h2>
+          <p className="text-xs text-ink-faint">{done} de {steps.length} passos concluídos</p>
+        </div>
+        <button className="btn-ghost h-8 text-xs" onClick={onHide}><X className="h-3.5 w-3.5" /> Ocultar</button>
+      </div>
+      <div className="h-1.5 bg-muted" role="progressbar" aria-valuenow={pctDone} aria-valuemin={0} aria-valuemax={100} aria-label="Progresso da configuração">
+        <div className="h-full bg-primary transition-all" style={{ width: `${pctDone}%` }} />
+      </div>
+      <ol className="divide-y divide-line">
+        {steps.map((x) => (
+          <li key={x.key} className="flex items-start gap-3 px-4 py-3">
+            {x.done ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-label="Concluído" /> : <Circle className="mt-0.5 h-5 w-5 shrink-0 text-ink-faint" aria-label="Pendente" />}
+            <div className="min-w-0 flex-1">
+              <p className={cx('text-sm font-medium', x.done && 'text-ink-faint line-through')}>{x.title}</p>
+              {!x.done && <p className="text-xs text-ink-faint">{x.text}</p>}
+            </div>
+            {!x.done && <Link to={x.to} className="btn-outline h-9 shrink-0 text-xs">{x.cta} <ChevronRight className="h-3.5 w-3.5" /></Link>}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 export default function Dashboard() {
   const nav = useNavigate();
-  const { user, can, scope } = useAuth();
+  const { user, can, scope, savePrefs } = useAuth();
   const { data: d, loading, reload } = useFetch(() => api.get('/v1/reports/dashboard'), []);
+  const hidden = !!user?.preferences?.setupDismissed;
+  const { data: setup } = useFetch(() => (hidden ? Promise.resolve(null) : api.get('/v1/reports/setup')), [hidden]);
+  const [showAll, setShowAll] = useState(false);
   const firstName = (user?.name || '').split(' ')[0];
-  const today = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
+  const todayRaw = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
+  const today = todayRaw.charAt(0).toUpperCase() + todayRaw.slice(1);
+  // conta recém-criada: tudo zerado → indicadores recolhidos até haver movimento
+  const brandNew = setup && !setup.clients && !setup.quotes;
 
   const actions = (
     <div className="flex flex-wrap gap-2">
@@ -100,18 +151,31 @@ export default function Dashboard() {
     <>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-sm capitalize text-ink-faint">{today}</p>
+          <p className="text-sm text-ink-faint">{today}</p>
           <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{greeting()}{firstName ? `, ${firstName}` : ''}</h1>
           <p className="mt-0.5 text-sm text-ink-faint">Resumo do que precisa da sua atenção.</p>
         </div>
         {actions}
       </div>
 
+      {setup && !hidden && <SetupChecklist setup={setup} onHide={() => savePrefs({ setupDismissed: true }).catch(() => {})} />}
+
       {loading && !d ? <Loading /> : !d ? (
         <Section><Empty icon={AlertTriangle} title="Não foi possível carregar o painel" action={<button className="btn-outline" onClick={reload}>Tentar de novo</button>} /></Section>
       ) : (
         <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
-          <div className="space-y-6">
+          <div className={cx('dash-cards space-y-6', showAll && 'dash-showall')}>
+            {brandNew && !showAll ? (
+              <div className="card flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
+                <span className="text-ink-soft">Os indicadores aparecem aqui assim que houver clientes, cotações e apólices.</span>
+                <button className="btn-outline h-9 text-xs" onClick={() => setShowAll(true)}><Eye className="h-4 w-4" /> Ver indicadores</button>
+              </div>
+            ) : (
+              <button className="btn-ghost h-9 text-xs sm:hidden" onClick={() => setShowAll((v) => !v)}>
+                {showAll ? <><EyeOff className="h-4 w-4" /> Ocultar indicadores zerados</> : <><Eye className="h-4 w-4" /> Mostrar também os indicadores zerados</>}
+              </button>
+            )}
+            {!(brandNew && !showAll) && <>
             {(d.quotes || d.opportunities) && (
               <Group title="Vendas em andamento">
                 {d.quotes && <>
@@ -158,18 +222,18 @@ export default function Dashboard() {
             )}
 
             {d.commissions && (
-              <section>
+              <section className="dash-group">
                 <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
                   <h2 className="text-sm font-semibold">Comissões da corretora</h2>
                   <p className="text-xs text-ink-faint">Previsão e valores confirmados são mostrados separadamente e nunca somados.</p>
                 </div>
                 <div className="grid gap-3 lg:grid-cols-2">
-                  <div className="rounded-app border border-dashed border-line p-3">
+                  <div className="dash-group rounded-app border border-dashed border-line p-3">
                     <div className="mb-2 flex items-center gap-2"><span className="chip bg-zinc-500/10 text-zinc-600 dark:text-zinc-300">Previsão</span>
                       <span className="text-xs text-ink-faint">Estimativas ainda não confirmadas pela seguradora</span></div>
                     <Card to="/comissoes" icon={Wallet} label="Comissão prevista (estimativa)" value={money(d.commissions.projected_cents)} hint="Pode mudar até a confirmação" />
                   </div>
-                  <div className="rounded-app border border-line p-3">
+                  <div className="dash-group rounded-app border border-line p-3">
                     <div className="mb-2 flex items-center gap-2"><span className="chip bg-sky-500/10 text-sky-700 dark:text-sky-300">Confirmado</span>
                       <span className="text-xs text-ink-faint">Valores confirmados / liquidados</span></div>
                     <div className="grid grid-cols-2 gap-3">
@@ -197,9 +261,10 @@ export default function Dashboard() {
             {!d.quotes && !d.policies && !d.opportunities && !d.installments && !d.claims && !d.commissions && !d.splits && (
               <Section><Empty title="Sem indicadores para o seu perfil" text="Seu perfil de acesso não inclui módulos com indicadores. Use a agenda para acompanhar suas tarefas." /></Section>
             )}
+            </>}
           </div>
 
-          <div className="space-y-4">
+          <div className="order-first space-y-4 xl:order-none">
             <Section title="Minhas tarefas" subtitle="Próximas pendências atribuídas a você"
               actions={<Link to="/agenda" className="text-xs font-medium text-primary hover:underline">Abrir agenda</Link>}>
               <MyTasks tasks={d.my_tasks} />

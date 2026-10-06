@@ -12,6 +12,32 @@ import { useTable, SortTh, Pager } from '../components/Table';
 const brlShort = (cents) => new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
 const fmtPart = (v, isMoney) => (isMoney ? money(v) : num(v));
 
+// leitura em linguagem simples de cada indicador (a definição técnica fica em "Como é calculado")
+const PLAIN = {
+  conv_opp: ['Negócios ganhos', (n, d) => `${n} de ${d} oportunidades encerradas foram ganhas`],
+  conv_quote: ['Cotações que viraram venda', (n, d) => `${n} de ${d} cotações com oferta terminaram em proposta aceita`],
+  renewal: ['Taxa de renovação', (n, d) => `${n} de ${d} apólices que venceram no período foram renovadas`],
+  auto_coverage: ['Consultas automáticas', (n, d) => `${n} de ${d} consultas às seguradoras foram feitas automaticamente`],
+  valid_return: ['Respostas com preço válido', (n, d) => `${n} de ${d} consultas respondidas trouxeram cotação válida`],
+  recon_auto: ['Extratos conciliados', (n, d) => `${n} de ${d} linhas de extrato foram conciliadas`],
+  premium_default: ['Parcelas de clientes em atraso', (n, d) => `${n} de ${d} em parcelas dos clientes estão vencidas`],
+  commission_late: ['Comissões atrasadas', (n, d) => `${n} de ${d} em comissões confirmadas estão vencidas`],
+};
+
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function presets() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  return [
+    { key: 'mes', label: 'Este mês', from: iso(new Date(y, m, 1)), to: ymd() },
+    { key: 'mes_ant', label: 'Mês passado', from: iso(new Date(y, m - 1, 1)), to: iso(new Date(y, m, 0)) },
+    { key: 'tri', label: 'Últimos 3 meses', from: iso(new Date(y, m - 2, 1)), to: ymd() },
+    { key: 'ano', label: 'Este ano', from: iso(new Date(y, 0, 1)), to: ymd() },
+    { key: '12m', label: 'Últimos 12 meses', from: addDaysYmd(-365), to: ymd() },
+  ];
+}
+
 export default function Reports() {
   const { can } = useAuth();
   const [from, setFrom] = useState(addDaysYmd(-365));
@@ -30,26 +56,36 @@ export default function Reports() {
 
   return (
     <div>
-      <PageHeader title="Relatórios e indicadores" subtitle="Cada indicador mostra numerador, denominador e definição. Sem dados suficientes, o valor fica em branco — nunca zero."
+      <PageHeader title="Relatórios e indicadores" subtitle="Como a corretora está indo no período escolhido. Sem movimento suficiente, o indicador fica em branco (—), nunca zero."
         actions={<>
           <Input type="date" aria-label="De" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="w-40" />
           <span className="text-ink-faint">a</span>
           <Input type="date" aria-label="Até" value={to} min={from} onChange={(e) => setTo(e.target.value)} className="w-40" />
         </>} />
+      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Períodos prontos">
+        {presets().map((p) => (
+          <button key={p.key} type="button" aria-pressed={from === p.from && to === p.to} onClick={() => { setFrom(p.from); setTo(p.to); }}
+            className={cx('rounded-full border px-3 py-1.5 text-sm', from === p.from && to === p.to ? 'border-primary bg-primary/10 font-medium text-primary' : 'border-line bg-surface text-ink-soft hover:bg-muted')}>{p.label}</button>
+        ))}
+      </div>
       {loading && !data ? <Loading /> : !data ? <Empty title="Não foi possível carregar os indicadores" /> : (
         <div className="space-y-6">
           <p className="text-xs text-ink-faint">Período: {fmt(data.period.from)} a {fmt(data.period.to)}</p>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {data.indicators.map((i) => (
-              <div key={i.key} className="card flex flex-col p-4">
-                <div className="text-xs font-medium text-ink-faint">{i.label}</div>
-                <div className={cx('mt-2 text-2xl font-semibold tabular-nums tracking-tight', i.value == null && 'text-ink-faint')}>{i.value == null ? 'sem base' : pct(i.value, 1)}</div>
-                <div className="mt-1 text-sm tabular-nums text-ink-soft">
-                  <span title="Numerador">{fmtPart(i.num, i.money)}</span> <span className="text-ink-faint">/</span> <span title="Denominador">{fmtPart(i.den, i.money)}</span>
+            {data.indicators.map((i) => {
+              const plain = PLAIN[i.key];
+              return (
+                <div key={i.key} className="card flex flex-col p-4">
+                  <div className="text-sm font-medium">{plain?.[0] || i.label}</div>
+                  <div className={cx('mt-1 text-2xl font-semibold tabular-nums tracking-tight', i.value == null && 'text-ink-faint')}>{i.value == null ? '—' : pct(i.value, 1)}</div>
+                  <p className="mt-1 text-sm text-ink-soft">{i.value == null ? 'Ainda sem movimento no período para calcular.' : plain ? plain[1](fmtPart(i.num, i.money), fmtPart(i.den, i.money)) : `${fmtPart(i.num, i.money)} de ${fmtPart(i.den, i.money)}`}</p>
+                  <details className="mt-auto border-t border-line pt-2 text-xs text-ink-faint">
+                    <summary className="cursor-pointer select-none py-1">Como é calculado</summary>
+                    <p className="mt-1">{i.label}: {i.definition}</p>
+                  </details>
                 </div>
-                <p className="mt-2 border-t border-line pt-2 text-xs text-ink-faint">{i.definition}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <Section title="Produção por ramo e seguradora" subtitle="Apólices com início de vigência no período."

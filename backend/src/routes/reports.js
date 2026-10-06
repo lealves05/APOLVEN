@@ -81,6 +81,18 @@ r.get('/dashboard', async (req, res) => {
   res.json(out);
 });
 
+/** Primeiros passos da corretora (checklist do painel): só contagens, sem dados pessoais. */
+r.get('/setup', async (req, res) => {
+  const x = await one(`select
+      (select count(*)::int from provider_connections pc join institutions i on i.id = pc.institution_id
+        where pc.company_id = $1 and pc.revoked_at is null and pc.accreditation = 'sim' and not pc.paused and i.kind <> 'parceiro_tecnologico') as insurers,
+      (select count(*)::int from commission_agreements where company_id = $1) as agreements,
+      (select count(*)::int from users where company_id = $1 and active) as users,
+      (select count(*)::int from clients where company_id = $1) as clients,
+      (select count(*)::int from quote_requests where company_id = $1) as quotes`, [req.companyId]);
+  res.json(x);
+});
+
 /** Indicadores com definição operacional e denominador explícito (22.3). */
 r.get('/indicators', need('reports'), async (req, res) => {
   const from = String(req.query.from || addDays(today(req.settings.timezone), -365));
