@@ -23,11 +23,21 @@ export default function Renewals() {
   const { can, branchLabel } = useAuth();
   const settings = useSettings();
   const nav = useNavigate();
-  const [days, setDays] = useState(90);
+  // período: janela em dias (w90) ou mês de vencimento (m0 = este mês, m1 = próximo…)
+  const [period, setPeriod] = useState('m0');
+  const months = useMemo(() => [0, 1, 2].map((k) => {
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + k);
+    const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const name = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(d);
+    return { key: `m${k}`, ym: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: k === 0 ? `Vencem este mês (${name})` : k === 1 ? `Próximo mês (${name})` : name.charAt(0).toUpperCase() + name.slice(1),
+      days: Math.max(1, Math.ceil((last - new Date()) / 86400000) + 1), title: name.charAt(0).toUpperCase() + name.slice(1) };
+  }), []);
+  const month = months.find((m) => m.key === period);
+  const days = month ? month.days : Number(period.slice(1));
   const { data, loading, reload } = useFetch(() => api.get(`/v1/renewals${qs({ days })}`), [days]);
   const [run, busy] = useAction();
   const [working, setWorking] = useState(null);
-  const rows = data || [];
+  const rows = useMemo(() => (data || []).filter((r) => !month || String(r.end_date).slice(0, 7) === month.ym), [data, month]);
   const alertDays = settings?.renewals?.alertDays || [];
   const label = (b) => (branchLabel ? branchLabel(b) : BRANCHES[b] || b);
 
@@ -41,7 +51,9 @@ export default function Renewals() {
       noContact: open.filter(noContact).length, renewed: rows.filter((r) => r.renewed_by).length,
     };
   }, [rows]);
-  const groups = WINDOWS.map((w) => ({ ...w, rows: rows.filter((r) => w.test(Number(r.days_left))) })).filter((g) => g.rows.length);
+  const groups = month
+    ? (rows.length ? [{ key: month.key, label: `Vencimentos de ${month.title.toLowerCase()}`, tone: '', rows: [...rows].sort((a, b) => String(a.end_date).localeCompare(String(b.end_date))) }] : [])
+    : WINDOWS.map((w) => ({ ...w, rows: rows.filter((r) => w.test(Number(r.days_left))) })).filter((g) => g.rows.length);
 
   const startRenewal = async (r, thenQuote = false) => {
     if (thenQuote && !can('renewals')) { nav(`/cotacoes/nova${qs({ client: r.client_id, branch: r.branch, renewal: r.id })}`); return; }
@@ -69,8 +81,9 @@ export default function Renewals() {
     <div>
       <PageHeader title="Renovações" subtitle="Vencimentos da carteira, oportunidades de renovação e contato com o cliente"
         actions={<>
-          <Select aria-label="Janela" value={days} onChange={(e) => setDays(Number(e.target.value))}>
-            {[30, 60, 90, 180].map((d) => <option key={d} value={d}>Próximos {d} dias</option>)}
+          <Select aria-label="Período" value={period} onChange={(e) => setPeriod(e.target.value)}>
+            <optgroup label="Por mês de vencimento">{months.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}</optgroup>
+            <optgroup label="Por prazo">{[30, 60, 90, 180].map((d) => <option key={d} value={`w${d}`}>Próximos {d} dias</option>)}</optgroup>
           </Select>
           {can('renewals') && <button className="btn-outline" disabled={busy} onClick={async () => { const r = await generate(); if (r !== FAIL) setGenResult(r.created); }}>
             <BellRing className="h-4 w-4" /> Gerar tarefas de alerta</button>}
@@ -83,14 +96,18 @@ export default function Renewals() {
       </Notice>
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Carteira exposta" value={kpi.exposed} hint={`${money(kpi.exposedPremium)} em prêmio sem renovação iniciada`} icon={TrendingDown} tone="text-red-500" />
+        <Stat label="Sem renovação iniciada" value={kpi.exposed} hint={`${money(kpi.exposedPremium)} em prêmio que ainda ninguém está trabalhando`} icon={TrendingDown} tone="text-red-500" />
         <Stat label="Renovações em andamento" value={kpi.progress} hint="Com oportunidade aberta" icon={Loader} tone="text-sky-500" />
         <Stat label="Clientes sem contato" value={kpi.noContact} hint={`Sem registro de contato há mais de ${NO_CONTACT_DAYS} dias`} icon={Users} tone="text-amber-500" />
         <Stat label="Já renovadas" value={kpi.renewed} hint="Nova apólice cadastrada" icon={Repeat} tone="text-emerald-500" />
       </div>
 
       {loading && !data ? <Loading /> : !rows.length ? (
-        <div className="card"><Empty icon={Repeat} title="Nenhum vencimento na janela" text={`Não há apólices vigentes vencendo nos próximos ${days} dias nem vencidas nos últimos 30.`} /></div>
+        <div className="card"><Empty icon={Repeat} title={month ? `Nenhuma apólice vence em ${month.title.toLowerCase()}` : 'Nenhum vencimento na janela'}
+          text={month ? 'Veja o próximo mês ou um prazo maior.' : `Não há apólices vigentes vencendo nos próximos ${days} dias nem vencidas nos últimos 30.`}
+          action={month && <div className="flex flex-wrap justify-center gap-2">
+            {period !== 'm1' && <button className="btn-outline" onClick={() => setPeriod('m1')}>Ver {months[1].title.toLowerCase()}</button>}
+            <button className="btn-ghost" onClick={() => setPeriod('w90')}>Próximos 90 dias</button></div>} /></div>
       ) : (
         <div className="space-y-4">
           {groups.map((g) => (
@@ -119,9 +136,11 @@ export default function Renewals() {
                       <td>
                         {!r.renewed_by && (
                           <div className="flex flex-wrap justify-end gap-1">
-                            {can('renewals') && !r.opportunity && <button className="btn-outline" disabled={busy && working === r.id} onClick={() => startRenewal(r)}><Repeat className="h-4 w-4" /> Iniciar</button>}
-                            {can('quotes_manage') && <button className="btn-ghost" disabled={busy && working === r.id} onClick={() => startRenewal(r, true)}><Calculator className="h-4 w-4" /> Cotar</button>}
-                            <a className="btn-ghost btn-icon" href={wa(r)} target="_blank" rel="noopener noreferrer" title="WhatsApp" aria-label={`Mensagem de renovação para ${r.client_name}`}><MessageCircle className="h-4 w-4" /></a>
+                            {can('quotes_manage') && <button className="btn-primary h-9 text-xs" disabled={busy && working === r.id} onClick={() => startRenewal(r, true)}
+                              title="Abre a renovação no funil e já começa a nova cotação, com a vigência seguinte"><Calculator className="h-4 w-4" /> Renovar e cotar</button>}
+                            {can('renewals') && !r.opportunity && <button className="btn-outline h-9 text-xs" disabled={busy && working === r.id} onClick={() => startRenewal(r)}
+                              title="Só registra a renovação no funil (CRM), para cotar depois"><Repeat className="h-4 w-4" /> Só abrir no funil</button>}
+                            <a className="btn-ghost h-9 text-xs" href={wa(r)} target="_blank" rel="noopener noreferrer" aria-label={`Mensagem de renovação para ${r.client_name} pelo WhatsApp`}><MessageCircle className="h-4 w-4" /> WhatsApp</a>
                           </div>
                         )}
                       </td>
