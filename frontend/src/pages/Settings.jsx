@@ -1,16 +1,17 @@
 // Configurações da corretora: dados reutilizados no credenciamento (Anexo C), unidades, usuários,
 // perfis de acesso, regras operacionais e aparência.
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Plus, Pencil, Copy, ShieldCheck, ShieldOff, Upload, Trash2, Save, KeyRound, Building } from 'lucide-react';
-import { api, fileToPayload } from '../lib/api';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Plus, Pencil, Copy, ShieldCheck, ShieldOff, Upload, Save, KeyRound, Building } from 'lucide-react';
+import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
 import { SubmitButton,
-  PageHeader, Section, Tabs, Modal, Input, Textarea, Select, Toggle, Notice, Empty, Loading, FileButton, useFetch, useAction, FAIL, cx,
+  PageHeader, Section, Tabs, Modal, Input, Textarea, Select, Toggle, Notice, Empty, Loading, useFetch, useAction, FAIL, cx,
 } from '../components/ui';
 import { ROLES, maskDoc, maskPhone, maskCep, lookupCep, fmtDateTime, onlyDigits } from '../lib/format';
 import { COLOR_THEMES, PRESET_COLORS, RADIUS, FONTS, applyTheme } from '../lib/theme';
+import LogoUploader from '../components/LogoUploader';
 
 const MFA_ROLES = ['owner', 'admin', 'finance'];
 const SEGMENTS = { danos: 'Danos / patrimonial', pessoas: 'Pessoas (vida/AP)', auto: 'Automóvel', saude: 'Saúde', odonto: 'Odontológico', previdencia: 'Previdência', capitalizacao: 'Capitalização', beneficios: 'Benefícios' };
@@ -48,7 +49,6 @@ const COMPANY_FIELDS = ['name', 'trade_name', 'document', 'susep_code', 'tech_re
 
 function CompanyTab() {
   const { can, setCompany } = useAuth();
-  const { toast } = useUI();
   const edit = can('settings');
   const { data, loading } = useFetch(() => api.get('/v1/company'), []);
   const [v, setV] = useState(null);
@@ -62,15 +62,10 @@ function CompanyTab() {
     const r = await lookupCep(v.cep);
     if (r) setV((x) => ({ ...x, street: r.street || x.street, district: r.district || x.district, city: r.city || x.city, uf: r.uf || x.uf }));
   };
-  const logo = async (file) => {
-    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) { toast('Use PNG, JPG ou WEBP.', 'error'); return; }
-    if (file.size > 200 * 1024) { toast('Logotipo acima de 200 KB. Reduza a imagem.', 'error'); return; }
-    const p = await fileToPayload(file);
-    setV((x) => ({ ...x, logo_url: `data:${p.mime};base64,${p.data}` }));
-  };
   const save = async () => {
     const body = {};
     for (const k of COMPANY_FIELDS) {
+      if (k === 'logo_url') continue; // logotipo: Configurações › Aparência
       if (k === 'segments') body.segments = v.segments;
       else if (k === 'name') body.name = v.name.trim();
       else if (k === 'document') body.document = onlyDigits(v.document) || null;
@@ -123,13 +118,12 @@ function CompanyTab() {
             </Select>
           </div>
         </Section>
-        <Section title="Logotipo" subtitle="PNG, JPG ou WEBP até 200 KB — usado no menu e nos documentos ao cliente">
+        <Section title="Logotipo" subtitle="Usado no menu, na versão impressa da apólice e nos documentos ao cliente">
           <div className="flex flex-wrap items-center gap-4">
             <div className="grid h-16 w-40 place-items-center rounded-app-sm border border-dashed border-line bg-muted/50">
               {v.logo_url ? <img src={v.logo_url} alt="Logotipo da corretora" className="max-h-14 max-w-[150px] object-contain" /> : <Building className="h-6 w-6 text-ink-faint" />}
             </div>
-            {edit && <FileButton accept="image/png,image/jpeg,image/webp" onFile={logo}><Upload className="h-4 w-4" /> Enviar logotipo</FileButton>}
-            {edit && v.logo_url && <button type="button" className="btn-ghost" onClick={() => setV({ ...v, logo_url: '' })}><Trash2 className="h-4 w-4" /> Remover</button>}
+            <Link to="/configuracoes?tab=aparencia&sec=logo" className="btn-outline"><Upload className="h-4 w-4" /> Alterar em Aparência</Link>
           </div>
         </Section>
       </fieldset>
@@ -465,7 +459,28 @@ function RulesTab() {
 }
 
 // ---------------- Aparência ----------------
+const PrintTemplateEditor = lazy(() => import('../components/PrintTemplateEditor'));
+const APPEARANCE_SECTIONS = [['estilo', 'Cores e estilo'], ['logo', 'Logo da corretora'], ['impressao', 'Modelo de impressão da apólice']];
+
 function AppearanceTab() {
+  const [sp, setSp] = useSearchParams();
+  const sec = APPEARANCE_SECTIONS.some(([k]) => k === sp.get('sec')) ? sp.get('sec') : 'estilo';
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Aparência">
+        {APPEARANCE_SECTIONS.map(([k, l]) => (
+          <button key={k} type="button" role="tab" aria-selected={sec === k} onClick={() => setSp({ tab: 'aparencia', ...(k === 'estilo' ? {} : { sec: k }) })}
+            className={cx('rounded-full border px-3 py-1.5 text-sm', sec === k ? 'border-primary bg-primary/10 font-medium text-primary' : 'border-line bg-surface text-ink-soft hover:bg-muted')}>{l}</button>
+        ))}
+      </div>
+      {sec === 'estilo' && <ThemeSettings />}
+      {sec === 'logo' && <LogoUploader />}
+      {sec === 'impressao' && <Suspense fallback={<Loading />}><PrintTemplateEditor /></Suspense>}
+    </div>
+  );
+}
+
+function ThemeSettings() {
   const { company, user, setCompany } = useAuth();
   const [run, busy] = useAction();
   const s = company?.settings || {};

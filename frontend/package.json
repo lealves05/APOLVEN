@@ -8,9 +8,19 @@
     "build": "vite build",
     "preview": "vite preview",
     "build:cloudflare": "vite build",
-    "deploy:cloudflare": "wrangler deploy -c ../cloudflare/wrangler.jsonc"
+    "deploy:cloudflare": "wrangler deploy -c ../cloudflare/wrangler.jsonc",
+    "test": "node --test src/lib/*.test.mjs"
   },
   "dependencies": {
+    "@tiptap/core": "^3.31.4",
+    "@tiptap/extension-highlight": "^3.31.4",
+    "@tiptap/extension-image": "^3.31.4",
+    "@tiptap/extension-table": "^3.31.4",
+    "@tiptap/extension-text-align": "^3.31.4",
+    "@tiptap/extension-text-style": "^3.31.4",
+    "@tiptap/pm": "^3.31.4",
+    "@tiptap/react": "^3.31.4",
+    "@tiptap/starter-kit": "^3.31.4",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.460.0",
     "qrcode": "^1.5.4",

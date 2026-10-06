@@ -26,7 +26,7 @@ export function Logo({ company, compact, light }) {
   return (
     <div className="flex min-w-0 items-center gap-2.5">
       {company?.logo_url
-        ? <img src={company.logo_url} alt="" className="h-9 w-9 rounded-app-sm bg-white object-cover" />
+        ? <img src={company.logo_url} alt="" className="h-9 w-9 rounded-app-sm bg-white object-contain p-0.5" />
         : <div className={cx('grid h-9 w-9 shrink-0 place-items-center rounded-app-sm', light ? 'bg-primary-fg/15 text-primary-fg' : 'bg-primary text-primary-fg')}>
             <Mark />
           </div>}
