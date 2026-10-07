@@ -10,6 +10,13 @@ const FN = ['/apolven-api-cf', '/apolven-api'];
 
 async function boot() {
   await migrate();
+  // caminho rápido: lê os segredos já gravados numa consulta só (sem DDL a cada instância nova); cria só o que faltar
+  if (!process.env.JWT_SECRET || !process.env.APOLVEN_VAULT_KEY) {
+    const rows = await pool.query("select key, value from _secrets where key in ('jwt_secret','vault_key')").then((r) => r.rows).catch(() => []);
+    const m = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    if (!process.env.JWT_SECRET && m.jwt_secret) process.env.JWT_SECRET = m.jwt_secret;
+    if (!process.env.APOLVEN_VAULT_KEY && m.vault_key) process.env.APOLVEN_VAULT_KEY = m.vault_key;
+  }
   // segredo do JWT guardado no próprio schema do APOLVEN (Edge Functions não recebem variáveis pelo deploy)
   if (!process.env.JWT_SECRET) {
     await pool.query(`create table if not exists _secrets (key text primary key, value text not null)`);

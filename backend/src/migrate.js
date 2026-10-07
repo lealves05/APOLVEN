@@ -14,9 +14,18 @@ function listMigrations() {
 
 export async function migrate() {
   const client = await pool.connect();
+  let locked = false;
   try {
+    // caminho rápido (cada instância nova da Edge Function passa por aqui): se todas as migrações deste pacote já
+    // estão registradas, uma consulta basta — sem trava, sem DDL. Só com migração pendente segue o caminho completo.
+    try {
+      const names = listMigrations().map((m) => m.name);
+      const { rows: [c] } = await client.query(`select count(*)::int as n from ${SCHEMA}._migrations where name = any($1::text[])`, [names]);
+      if (c.n === names.length) return;
+    } catch { /* tabela de controle ainda não existe: caminho completo */ }
     // trava para instâncias simultâneas da Edge Function (chave própria do APOLVEN)
     await client.query('select pg_advisory_lock(7265001)');
+    locked = true;
     await client.query(`create schema if not exists ${SCHEMA}`);
     await client.query(`set search_path to ${SCHEMA}`);
     // o schema não é exposto pela API REST da Supabase; mesmo assim os papéis públicos não recebem acesso
@@ -43,7 +52,7 @@ export async function migrate() {
       }
     }
   } finally {
-    await client.query('select pg_advisory_unlock(7265001)').catch(() => {});
+    if (locked) await client.query('select pg_advisory_unlock(7265001)').catch(() => {});
     client.release();
   }
 }

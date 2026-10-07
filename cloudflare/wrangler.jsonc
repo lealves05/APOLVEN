@@ -16,6 +16,8 @@
   "vars": {
     "PRODUCT_ID": "apolven",
     "API_UPSTREAM": "https://dwfbxrfniarhufltmlhb.supabase.co/functions/v1/apolven-api-cf",
+    // a API roda na região do banco de dados (evita ida e volta entre continentes a cada consulta)
+    "API_REGION": "sa-east-1",
     // agendador do agente do WhatsApp (avisos aos clientes e lembretes da equipe). Exige o segredo CRON_SECRET.
     "CRON_PATH": "/api/agent/cron"
   },
