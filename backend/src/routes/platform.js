@@ -78,6 +78,25 @@ platformApi.post('/tenants/:id/owner-reset', async (req, res) => {
     message: 'Senha provisória criada. No primeiro acesso o responsável troca a senha em "Minha conta" e cadastra de novo a verificação em duas etapas.' });
 });
 
+/**
+ * A central exclui a empresa (pedido do MASTER, já confirmado lá com o nome digitado e o motivo):
+ * apaga a empresa e tudo o que pertence a ela (usuários, cadastros, movimentos, histórico). Não pode ser desfeito.
+ */
+platformApi.post('/tenants/:id/delete', async (req, res) => {
+  const c = await company(req.params.id);
+  parse(z.object({ confirm: z.literal(true), reason: z.string().max(500).nullable().optional() }), req.body || {});
+  const removed = await tx(async (db) => {
+    const { rows: [locked] } = await db.query('select id from companies where id=$1 for update', [c.id]);
+    if (!locked) throw notFound('Empresa não encontrada.');
+    // libera só para esta transação as travas de registros imutáveis da própria empresa (ex.: lote de repasse aprovado)
+    await db.query("select set_config('apolven.purge_company', $1, true)", [String(c.id)]);
+    const { rows: [n] } = await db.query('select count(*)::int as usuarios from users where company_id=$1', [c.id]);
+    await db.query('delete from companies where id=$1', [c.id]);
+    return n;
+  });
+  res.json({ ok: true, removed });
+});
+
 // ---- Parâmetros (contrato v1.1): do sistema e de cada empresa ----
 platformApi.get('/settings', async (_req, res) => res.json({ values: await getSystemParams() }));
 platformApi.put('/settings', async (req, res) => res.json({ values: await setSystemParams(req.body?.values) }));
