@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes, Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
@@ -5,33 +6,55 @@ import Layout from './components/Layout';
 import { Loading } from './components/ui';
 import { BlockedScreen } from './components/Billing';
 import { Login, Register, ForgotPassword, ResetPassword, DemoSignup } from './pages/Auth';
-import Account, { MfaRequiredScreen } from './pages/Account';
-import Subscription from './pages/Subscription';
-import Dashboard from './pages/Dashboard';
-import Agenda from './pages/Agenda';
-import Opportunities from './pages/Opportunities';
-import Clients, { ClientDetail } from './pages/Clients';
-import Quotes, { QuoteNew, QuoteDetail, ComparisonDetail } from './pages/Quotes';
-import Proposals, { ProposalDetail } from './pages/Proposals';
-import Policies, { PolicyNew, PolicyDetail } from './pages/Policies';
-import Renewals from './pages/Renewals';
-import Installments from './pages/Installments';
-import Claims, { ClaimDetail } from './pages/Claims';
-import Commissions from './pages/Commissions';
-import Splits from './pages/Splits';
-import Finance from './pages/Finance';
-import Integrations, { ConnectionDetail } from './pages/Integrations';
-import AgentWhatsApp from './pages/AgentWhatsApp';
-import Products from './pages/Products';
-import Documents from './pages/Documents';
-import Communication from './pages/Communication';
-import Reports from './pages/Reports';
-import Settings from './pages/Settings';
-import Audit from './pages/Audit';
-import Privacy from './pages/Privacy';
-import Support from './pages/Support';
-import { PrintComparison } from './pages/Print';
-import { PublicComparison, PublicInstallments, PublicDocument } from './pages/Public';
+const named = (load, name) => lazy(() => load().then((m) => ({ default: m[name] })));
+
+const loadAccount = () => import('./pages/Account');
+const Account = lazy(loadAccount);
+const MfaRequiredScreen = named(loadAccount, 'MfaRequiredScreen');
+const Subscription = lazy(() => import('./pages/Subscription'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Agenda = lazy(() => import('./pages/Agenda'));
+const Opportunities = lazy(() => import('./pages/Opportunities'));
+const loadClients = () => import('./pages/Clients');
+const Clients = lazy(loadClients);
+const ClientDetail = named(loadClients, 'ClientDetail');
+const loadQuotes = () => import('./pages/Quotes');
+const Quotes = lazy(loadQuotes);
+const QuoteNew = named(loadQuotes, 'QuoteNew');
+const QuoteDetail = named(loadQuotes, 'QuoteDetail');
+const ComparisonDetail = named(loadQuotes, 'ComparisonDetail');
+const loadProposals = () => import('./pages/Proposals');
+const Proposals = lazy(loadProposals);
+const ProposalDetail = named(loadProposals, 'ProposalDetail');
+const loadPolicies = () => import('./pages/Policies');
+const Policies = lazy(loadPolicies);
+const PolicyNew = named(loadPolicies, 'PolicyNew');
+const PolicyDetail = named(loadPolicies, 'PolicyDetail');
+const Renewals = lazy(() => import('./pages/Renewals'));
+const Installments = lazy(() => import('./pages/Installments'));
+const loadClaims = () => import('./pages/Claims');
+const Claims = lazy(loadClaims);
+const ClaimDetail = named(loadClaims, 'ClaimDetail');
+const Commissions = lazy(() => import('./pages/Commissions'));
+const Splits = lazy(() => import('./pages/Splits'));
+const Finance = lazy(() => import('./pages/Finance'));
+const loadIntegrations = () => import('./pages/Integrations');
+const Integrations = lazy(loadIntegrations);
+const ConnectionDetail = named(loadIntegrations, 'ConnectionDetail');
+const AgentWhatsApp = lazy(() => import('./pages/AgentWhatsApp'));
+const Products = lazy(() => import('./pages/Products'));
+const Documents = lazy(() => import('./pages/Documents'));
+const Communication = lazy(() => import('./pages/Communication'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Audit = lazy(() => import('./pages/Audit'));
+const Privacy = lazy(() => import('./pages/Privacy'));
+const Support = lazy(() => import('./pages/Support'));
+const PrintComparison = named(() => import('./pages/Print'), 'PrintComparison');
+const loadPublic = () => import('./pages/Public');
+const PublicComparison = named(loadPublic, 'PublicComparison');
+const PublicInstallments = named(loadPublic, 'PublicInstallments');
+const PublicDocument = named(loadPublic, 'PublicDocument');
 
 function BlockedSubscription() {
   return (
@@ -53,6 +76,7 @@ export default function App() {
   const { user, loading, access, mfa_setup_required: mfaSetup } = useAuth();
   const admin = ['owner', 'admin'].includes(user?.role);
   return (
+    <Suspense fallback={<Loading />}>
     <Routes>
       <Route path="/p/comparativo/:token" element={<PublicComparison />} />
       <Route path="/p/parcelas/:token" element={<PublicInstallments />} />
@@ -118,5 +142,6 @@ export default function App() {
         </>
       )}
     </Routes>
+    </Suspense>
   );
 }

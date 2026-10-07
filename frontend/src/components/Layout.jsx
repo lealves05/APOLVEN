@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, LifeBuoy, Users, Wallet, BarChart3, UserRound, Settings, LogOut, Menu, X, Sun, Moon, ChevronDown, Plus, ShieldCheck, Building2,
@@ -8,7 +8,7 @@ import {
 import { GlobalSearch, SearchButton, Notifications, HelpButton, useShortcuts } from './Workspace';
 import { useAuth } from '../context/AuthContext';
 import { ROLES } from '../lib/format';
-import { cx, Avatar } from './ui';
+import { cx, Avatar, Loading } from './ui';
 import DemoBanner from './DemoBanner';
 import { BillingNotices } from './Billing';
 import { PRESET_COLORS } from '../lib/theme';
@@ -281,7 +281,7 @@ function TopLayout() {
       <main key={loc.pathname} className="has-bottom-nav flex-1 overflow-y-auto">
         <div className={cx('mx-auto w-full p-4 animate-fade sm:p-6', wide ? 'max-w-none lg:px-6' : 'max-w-[1400px] lg:p-8')}>
           <div className="mb-3"><Breadcrumbs nav={nav} /></div>
-          <Outlet />
+          <Suspense fallback={<Loading />}><Outlet /></Suspense>
         </div>
       </main>
       <BottomNav nav={nav} onMore={() => setOpen(true)} />
@@ -412,7 +412,7 @@ function SideLayout() {
         <main key={loc.pathname} className="has-bottom-nav flex-1 overflow-y-auto">
           <div className={cx('mx-auto w-full p-4 animate-fade sm:p-6', wide ? 'max-w-none lg:px-6' : 'max-w-[1400px] lg:p-8')}>
             <div className="mb-3 lg:hidden"><Breadcrumbs nav={nav} /></div>
-            <Outlet />
+            <Suspense fallback={<Loading />}><Outlet /></Suspense>
           </div>
         </main>
         <BottomNav nav={nav} onMore={() => setOpen(true)} />
