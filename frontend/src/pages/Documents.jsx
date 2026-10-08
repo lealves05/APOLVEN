@@ -28,8 +28,9 @@ const TABS = [{ value: 'documentos', label: 'Documentos' }, { value: 'importacoe
 
 export default function Documents() {
   const [sp, setSp] = useSearchParams();
-  const { can } = useAuth();
-  const tabs = TABS.filter((t) => t.value !== 'importacoes' || can('imports'));
+  const { can, feature } = useAuth();
+  // abas que dependem de módulos do plano: importações e links temporários
+  const tabs = TABS.filter((t) => (t.value !== 'importacoes' || (can('imports') && feature('importacoes'))) && (t.value !== 'links' || feature('portal_cliente')));
   const tab = tabs.some((t) => t.value === sp.get('tab')) ? sp.get('tab') : 'documentos';
   return (
     <>
@@ -44,6 +45,7 @@ export default function Documents() {
 
 // ---------------- Documentos ----------------
 function DocsTab({ clientId }) {
+  const { feature } = useAuth();
   const { toast } = useUI();
   const [entity, setEntity] = useState('');
   const [q, setQ] = useState('');
@@ -91,7 +93,7 @@ function DocsTab({ clientId }) {
                   <td data-label="">
                     <div className="flex justify-end gap-1">
                       <button className="btn-ghost btn-icon" aria-label="Baixar" title="Baixar" onClick={() => get(d)}><Download className="h-4 w-4" /></button>
-                      {d.access_level !== 'restrito' && <button className="btn-ghost btn-icon" aria-label="Gerar link temporário" title="Link temporário" onClick={() => setLink(d)}><Link2 className="h-4 w-4" /></button>}
+                      {d.access_level !== 'restrito' && feature('portal_cliente') && <button className="btn-ghost btn-icon" aria-label="Gerar link temporário" title="Link temporário" onClick={() => setLink(d)}><Link2 className="h-4 w-4" /></button>}
                     </div>
                   </td>
                 </tr>

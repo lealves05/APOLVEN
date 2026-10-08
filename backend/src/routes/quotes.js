@@ -64,7 +64,10 @@ async function createRound(db, req, request, d) {
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning *`,
   [req.companyId, request.id, n, version, risk, JSON.stringify(d.min_coverages), { ...d.preferences, sharing_basis: d.sharing_basis }, d.start_date || null, d.end_date || null,
     req.settings.scoring, hashOf(snapshot), req.user.id]);
-  for (const e of chosen) {
+  // sem o módulo "Cotação automática pela API" no plano, toda fonte vira consulta assistida (pelo canal oficial)
+  const autoAllowed = req.access?.features?.cotacao_api !== false;
+  for (const e0 of chosen) {
+    const e = !autoAllowed && e0.mode === 'automatica' ? { ...e0, mode: 'assistida' } : e0;
     for (const sc of d.scenarios) {
       await db.query(`insert into quote_tasks (company_id, round_id, institution_id, connection_id, scenario, mode, status, assignee_user_id, due_at)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,

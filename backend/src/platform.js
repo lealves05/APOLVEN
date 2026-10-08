@@ -13,6 +13,7 @@
  */
 import crypto from 'node:crypto';
 import { q, one } from './db.js';
+import { compileModuleRules, moduleForRoute } from './moduleRules.js';
 import { HttpError } from './util.js';
 
 const SKEW = 300;
@@ -21,20 +22,27 @@ let hubDownUntil = 0; // central fora do ar: evita esperar o tempo limite a cada
 
 /** Módulos do APOLVEN que a central pode ligar/desligar por plano ou corretora. `routes` = prefixos da API protegidos. */
 export const FEATURES = {
-  crm: { label: 'CRM, oportunidades e tarefas', routes: ['/opportunities'] },
+  crm: { label: 'CRM e oportunidades', routes: ['/opportunities'] },
   multicalculo: { label: 'Central de cotações e comparativos', routes: ['/quote-requests', '/comparisons'] },
   propostas: { label: 'Propostas e transmissão', routes: ['/proposals'] },
   renovacoes: { label: 'Renovações', routes: ['/renewals'] },
-  comissoes: { label: 'Comissões e conciliação de extratos', routes: ['/commissions', '/statements'] },
+  comissoes: { label: 'Comissões e conciliação de extratos', routes: ['/commissions'] },
   repasses: { label: 'Repasses a produtores e parceiros', routes: ['/splits', '/partners'] },
   financeiro: { label: 'Financeiro da corretora e conciliação bancária', routes: ['/finance'] },
   sinistros: { label: 'Sinistros e solicitações', routes: ['/claims', '/service-requests'] },
   integracoes: { label: 'Seguradoras e integrações', routes: ['/integrations'] },
-  importacoes: { label: 'Importações', routes: ['/imports'] },
+  importacoes: { label: 'Importação de clientes e apólices por planilha', routes: ['/reports/imports'] },
   relatorios: { label: 'Relatórios e indicadores', routes: ['/reports'] },
   exportacao: { label: 'Exportação de dados', routes: ['/export'] },
   whatsapp: { label: 'Agente do WhatsApp', routes: ['/agent'] },
+  // recursos que existiam dentro de outros módulos e agora podem entrar ou sair dos planos separadamente
+  // (vale a regra mais específica: PUT .../api-config é "Cotação automática", não "Seguradoras e integrações")
+  cotacao_api: { label: 'Cotação automática pela API das seguradoras', routes: ['/integrations/api-contract', 'PUT /integrations/connections/:id/api-config', '/quote-requests/:id/rounds/:rid/run', '/quote-requests/tasks/:tid/api-calls'] },
+  impressao_personalizada: { label: 'Modelo próprio da apólice impressa (editor)', routes: ['PUT,DELETE /print-templates/policy'] },
+  portal_cliente: { label: 'Portal do cliente (parcelas) e links de documentos', routes: ['/portal-links', 'POST /documents/:id/link', '/documents/links'] },
+  multiunidades: { label: 'Várias unidades (filiais)', routes: ['POST,PUT /company/units'] },
 };
+const MODULE_RULES = compileModuleRules(FEATURES);
 /** Rotas liberadas mesmo com a empresa bloqueada (regularização e leitura mínima). */
 const BLOCKED_ALLOWED = ['/billing', '/export'];
 
@@ -185,10 +193,10 @@ export async function platformGate(req, _res, next) {
       { code: 'TENANT_BLOCKED', status: access.status, reason: access.reason });
   }
   const f = access.features || {};
-  for (const [key, def] of Object.entries(FEATURES)) {
-    if (f[key] === false && def.routes.some((p) => path === p || path.startsWith(`${p}/`))) {
-      throw new HttpError(403, `O módulo ${def.label} não está disponível no seu plano.`, { code: 'FEATURE_DISABLED', feature: key });
-    }
+  // módulo da regra mais específica que cobre a rota
+  const key = moduleForRoute(MODULE_RULES, req.method, path);
+  if (key && f[key] === false) {
+    throw new HttpError(403, `O módulo ${FEATURES[key].label} não está disponível no seu plano.`, { code: 'FEATURE_DISABLED', feature: key });
   }
   next();
 }

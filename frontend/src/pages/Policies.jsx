@@ -867,7 +867,7 @@ function ItemsTab({ p, reload }) {
 export const PREMIUM_BANNER = 'O prêmio é pago pelo cliente diretamente à seguradora: não é receita da corretora. "Pagamento informado" (pelo cliente ou pela equipe) não é "pagamento confirmado" pela seguradora.';
 
 function InstallmentsTab({ p, reload }) {
-  const { can } = useAuth();
+  const { can, feature } = useAuth();
   const [act, setAct] = useState(null); // { kind, inst }
   const [modal, setModal] = useState(null);
   const close = () => { setAct(null); setModal(null); };
@@ -879,7 +879,7 @@ function InstallmentsTab({ p, reload }) {
       <Notice tone="info"><Info className="mr-1 inline h-4 w-4" />{PREMIUM_BANNER}</Notice>
       <Section title="Parcelas do prêmio" subtitle="Situação conforme a última informação da fonte — veja quando cada parcela foi atualizada" bodyClass="p-0"
         actions={<>
-          {can('installments') && <button className="btn-ghost" onClick={() => setModal('portal')}><Link2 className="h-4 w-4" /> Link do portal (parcelas)</button>}
+          {can('installments') && feature('portal_cliente') && <button className="btn-ghost" onClick={() => setModal('portal')}><Link2 className="h-4 w-4" /> Link do portal (parcelas)</button>}
           {can('policies_manage') && !hasBase && <button className="btn-outline" onClick={() => setModal('plan')}><Wand2 className="h-4 w-4" /> Gerar plano</button>}
           {can('policies_manage') && <button className="btn-outline" onClick={() => setModal('add')}><Plus className="h-4 w-4" /> Adicionar parcelas</button>}
         </>}>
@@ -1579,7 +1579,7 @@ function ClaimsTab({ p }) {
 
 // ---------------- Documentos ----------------
 function DocumentsTab({ p }) {
-  const { can } = useAuth();
+  const { can, feature } = useAuth();
   const { toast } = useUI();
   const [run] = useAction();
   const { data, loading, reload } = useFetch(() => api.get(`/v1/documents${qs({ entity: 'policy', entity_id: p.id })}`), [p.id]);
@@ -1616,7 +1616,7 @@ function DocumentsTab({ p }) {
                 <td>{fmtDateTime(d.created_at)}</td>
                 <td><div className="flex justify-end gap-1">
                   <button className="btn-ghost btn-icon" title="Baixar" aria-label={`Baixar ${d.filename}`} onClick={() => dl(d)}><Download className="h-4 w-4" /></button>
-                  {d.access_level !== 'restrito' && <button className="btn-ghost btn-icon" title="Link temporário" aria-label={`Link temporário de ${d.filename}`} onClick={() => setLinkDoc(d)}><Link2 className="h-4 w-4" /></button>}
+                  {d.access_level !== 'restrito' && feature('portal_cliente') && <button className="btn-ghost btn-icon" title="Link temporário" aria-label={`Link temporário de ${d.filename}`} onClick={() => setLinkDoc(d)}><Link2 className="h-4 w-4" /></button>}
                 </div></td>
               </tr>
             ))}</tbody>

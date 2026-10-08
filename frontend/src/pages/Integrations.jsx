@@ -71,7 +71,7 @@ const SECTIONS = [
   { value: 'adicionar', label: 'Adicionar empresa' },
   { value: 'pendencias', label: 'Pendências' },
   { value: 'historico', label: 'Histórico e sincronizações' },
-  { value: 'contrato', label: 'Contrato da API' },
+  { value: 'contrato', label: 'Contrato da API', feature: 'cotacao_api' },
 ];
 
 // =====================================================================================
@@ -79,8 +79,9 @@ const SECTIONS = [
 // =====================================================================================
 export default function Integrations() {
   const [sp, setSp] = useSearchParams();
-  const tab = SECTIONS.some((s) => s.value === sp.get('tab')) ? sp.get('tab') : 'minhas';
-  const { can } = useAuth();
+  const { can, feature } = useAuth();
+  const sections = SECTIONS.filter((s) => !s.feature || feature(s.feature));
+  const tab = sections.some((s) => s.value === sp.get('tab')) ? sp.get('tab') : 'minhas';
   const manage = can('integrations_manage');
   const [help, setHelp] = useState(false);
   const go = (t, extra = {}) => setSp({ ...(t === 'minhas' ? {} : { tab: t }), ...extra });
@@ -94,11 +95,11 @@ export default function Integrations() {
           <button className="btn-outline" onClick={() => go('pendencias')}><ListChecks className="h-4 w-4" /> Ver pendências</button>
           {manage && <button className="btn-primary" onClick={() => go('adicionar')}><Plus className="h-4 w-4" /> Adicionar empresa</button>}
         </>} />
-      <Tabs tabs={SECTIONS} value={tab} onChange={(t) => go(t)} />
+      <Tabs tabs={sections} value={tab} onChange={(t) => go(t)} />
       {tab === 'minhas' && <MyCompanies onAdd={() => go('adicionar')} onHistory={(id) => go('historico', { connection_id: id })} />}
       {tab === 'adicionar' && <AddCompany />}
       {tab === 'pendencias' && <Pendencias />}
-      {tab === 'contrato' && <QuoteApiContract />}
+      {tab === 'contrato' && feature('cotacao_api') && <QuoteApiContract />}
       {tab === 'historico' && <HistoryTab connectionId={sp.get('connection_id') || ''} onConnection={(id) => go('historico', id ? { connection_id: id } : {})} />}
       <Modal open={help} onClose={() => setHelp(false)} title="Ajuda para credenciamento" subtitle="Respostas rápidas para as dúvidas mais comuns" size="lg">
         <HelpPanel onNavigate={(t) => { setHelp(false); go(t); }} />
@@ -779,7 +780,7 @@ export function ConnectionDetail() {
   const { id } = useParams();
   const [sp, setSp] = useSearchParams();
   const navigate = useNavigate();
-  const { can } = useAuth();
+  const { can, feature } = useAuth();
   const manage = can('integrations_manage');
   const { toast } = useUI();
   const { data: c, loading, reload } = useFetch(() => api.get(`/v1/integrations/connections/${id}`), [id]);
@@ -863,7 +864,7 @@ export function ConnectionDetail() {
       <div className="mb-4">
         {step === 1 && <Step1 c={c} reload={reload} readOnly={readOnly} />}
         {step === 2 && <Step2 c={c} reload={reload} readOnly={readOnly} />}
-        {step === 3 && (c.template?.api_config
+        {step === 3 && (c.template?.api_config && feature('cotacao_api')
           ? <QuoteApiConfig c={c} reload={reload} readOnly={readOnly || !can('credentials_manage')} onTest={manage && !readOnly ? test : null} testing={busy} />
           : <Step3 c={c} reload={reload} readOnly={readOnly || !can('credentials_manage')} onDone={() => setStep(4)} />)}
         {step === 4 && <Step4 c={c} reload={reload} readOnly={readOnly} onTest={test} busy={busy} />}

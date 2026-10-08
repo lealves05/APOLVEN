@@ -134,15 +134,16 @@ function CompanyTab() {
 
 // ---------------- Unidades ----------------
 function UnitsTab() {
-  const { can } = useAuth();
-  const edit = can('units_manage');
+  const { can, feature } = useAuth();
+  const multi = feature('multiunidades');
+  const edit = can('units_manage') && multi;
   const { data, loading, reload } = useFetch(() => api.get('/v1/company/units'), []);
   const [open, setOpen] = useState(null);
   if (loading && !data) return <Loading />;
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-ink-soft">Filiais e escritórios. Vínculos com seguradoras podem ser configurados por unidade.</p>
+        <p className="text-sm text-ink-soft">{multi ? 'Filiais e escritórios. Vínculos com seguradoras podem ser configurados por unidade.' : 'O cadastro e a edição de filiais não fazem parte do plano atual. Fale com o suporte para liberar o módulo de múltiplas unidades.'}</p>
         {edit && <button className="btn-primary" onClick={() => setOpen({})}><Plus className="h-4 w-4" /> Nova unidade</button>}
       </div>
       {!data?.length ? <div className="card"><Empty title="Nenhuma unidade" /></div> : (
@@ -463,6 +464,7 @@ const PrintTemplateEditor = lazy(() => import('../components/PrintTemplateEditor
 const APPEARANCE_SECTIONS = [['estilo', 'Cores e estilo'], ['logo', 'Logo da corretora'], ['impressao', 'Modelo de impressão da apólice']];
 
 function AppearanceTab() {
+  const { feature } = useAuth();
   const [sp, setSp] = useSearchParams();
   const sec = APPEARANCE_SECTIONS.some(([k]) => k === sp.get('sec')) ? sp.get('sec') : 'estilo';
   return (
@@ -475,7 +477,9 @@ function AppearanceTab() {
       </div>
       {sec === 'estilo' && <ThemeSettings />}
       {sec === 'logo' && <LogoUploader />}
-      {sec === 'impressao' && <Suspense fallback={<Loading />}><PrintTemplateEditor /></Suspense>}
+      {sec === 'impressao' && (feature('impressao_personalizada')
+        ? <Suspense fallback={<Loading />}><PrintTemplateEditor /></Suspense>
+        : <div className="card p-4 text-sm text-ink-soft">As apólices são impressas no modelo padrão do APOLVEN, com o logo da corretora. O editor de modelo próprio faz parte dos planos com <b>Modelo próprio da apólice impressa</b>.</div>)}
     </div>
   );
 }
